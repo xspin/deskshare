@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>DeskShare {{version}}</title>
+    <script src="mjpeg.min.js"></script>
+    <style>
+      .transparent-btn {
+        background-color: gray;
+        opacity: 0.5;
+        cursor: pointer;
+        border-radius: 5px;
+      }
+
+      .transparent-btn:hover {
+        opacity: 1;
+      }
+
+    div#info {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      text-align: right;
+      width: auto;
+      z-index: 99;
+    }
+
+    div#info a {
+      margin-left: 0.5em;
+      margin-right: 0.5em;
+      font-size: 12px;
+      color: gray;
+    }
+
+    div#info:hover {
+      background-color: black;
+    }
+    </style>
+  </head>
+  <body style="margin: 0px; width: 100%;">
+  <div id="info">
+    <a id="fps"></a>
+    <a id="delay"></a>
+    <button class="transparent-btn" id="play" onclick="playOrStop()"></button>
+  </div>
+
+  <div style="background-color:black; width: 100%; height: 100%; position: absolute; top: 0; left: 0; margin: 0;">
+    <img id="player" style="display: block; margin: auto;" height="100%"/>
+  </div>
+  </body>
+
+  <script>
+    var running = false;
+    var frames = 0;
+    var delay = 0;
+    var timestamp = new Date().getTime();
+    const btn = document.getElementById("play");
+
+    const k = 2;
+    setInterval(()=>{
+      const fps = frames < k ? '0' : (frames/k).toFixed(2);
+      document.getElementById("fps").textContent = `${fps} fps`;
+      document.getElementById("delay").textContent = `${delay} ms`;
+      frames = 0;
+    }, k*1000);
+
+    function failed() {
+      running = false;
+      player.stop();
+      btn.textContent = "Play ▶︎";
+      alert("连接失败，请刷新页面重试！");
+    }
+
+    function playOrStop() {
+      if (player) {
+        if (running) {
+          player.stop();
+          btn.textContent = "Play ▶︎";
+        } else {
+          player.start();
+          btn.textContent = "Stop ◼︎";
+        }
+      }
+    }
+
+    function onErr(status, payload) {
+      console.log(status);
+      console.warn(payload);
+      failed();
+    }
+
+    function onStarted() {
+      console.log('Started');
+      running = true;
+    }
+
+    function onStopped() {
+      running = false;
+      console.log('Stopped');
+    }
+
+    function onFrame(frame) {
+      frames++;
+      delay = Math.round(delay*0.5 + (new Date().getTime() - timestamp)*0.5);
+      timestamp = new Date().getTime();
+    }
+
+    function onLoad(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target instanceof Image) e.target.onload = undefined;
+    }
+
+    const url = window.location.origin + '/mjpeg';
+    var player = new MJPEG.Player("player", url, "", "", {onError:  onErr, onStart: onStarted, onStop: onStopped, onFrame: onFrame, onLoad: onLoad});
+    playOrStop();
+  </script>
+</html>

@@ -1,0 +1,14 @@
+.DS_Store
+.vscode/
+__pycache__/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+bin/
+lib/
+build/
+3rdparty/
+*.log
+test/
+leaksrun.sh

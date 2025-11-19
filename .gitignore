@@ -12,3 +12,4 @@ build/
 *.log
 test/
 leaksrun.sh
+*.app

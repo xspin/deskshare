@@ -27,14 +27,18 @@ std::string Logger::getColoredLevelString(LogLevel level) {
 }
 
 Logger::Logger(LogLevel level, bool color)
-    : currentLevel(level), useColor(color), logToFile(false) {
-    outputStream = &std::cout;
+    : currentLevel(level), useColor(color), logToFile(false), mask(LOG_ALL) {
+    outputStream = &std::cerr;
 }
 
 Logger::~Logger() {
     if (fileStream.is_open()) {
         fileStream.close();
     }
+}
+
+void Logger::setOutStream(std::ostream* os) {
+    outputStream = os;
 }
 
 void Logger::setLogFile(const std::string& filename) {
@@ -50,10 +54,17 @@ void Logger::setLogLevel(LogLevel level) {
     currentLevel = level;
 }
 
-void Logger::setUseColor(bool color) {
-    useColor = color;
+void Logger::setMask(unsigned int mask) {
+    this->mask = mask;
 }
 
+LogLevel Logger::getLogLevel() {
+    return currentLevel;
+}
+
+void Logger::setColor(bool color) {
+    useColor = color;
+}
 
 void Logger::log(LogLevel level, const std::string& function, int line, const std::string& file,
     const char *format, ...) {
@@ -66,31 +77,40 @@ void Logger::log(LogLevel level, const std::string& function, int line, const st
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
-    std::stringstream ss;
-    ss << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-    ss << "." << std::setfill('0') << std::setw(3) << ms.count() << "]";
-    ss << "[" << getColoredLevelString(level) << "]";
-    size_t i = file.rfind('/');
-    if (i == std::string::npos) i = file.rfind('\\');
-    ss << "[" << file.substr(i+1) << ":" << line << "]";
-    ss << "[" << function << "] ";
 
+    std::stringstream ss;
+
+    if (mask & LOG_TIME) {
+        ss << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+        ss << "." << std::setfill('0') << std::setw(3) << ms.count() << "]";
+    } else if (mask & LOG_STIME) {
+        ss << "[" << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+        ss << "." << std::setfill('0') << std::setw(3) << ms.count() << "]";
+    }
+    if (mask & LOG_LEVEL) {
+        ss << "[" << getColoredLevelString(level) << "]";
+    }
+    if (mask & LOG_LINE) {
+        size_t i = file.rfind('/');
+        if (i == std::string::npos) i = file.rfind('\\');
+        ss << "[" << file.substr(i+1) << ":" << line << "]";
+    }
+    if (mask & LOG_FUNC) {
+        ss << "[" << function << "]";
+    }
+    
     va_list args;
     va_start(args, format);
-    char buffer[256];
+    char buffer[512];
     std::vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    ss << buffer;
-    
+
+    ss << " " << buffer << "\n";
+
     std::string logMessage = ss.str();
     
     // 输出到控制台
-    if (level == LogLevel::ERR) {
-        std::cerr << logMessage << std::endl;
-    } else {
-        std::cout << logMessage << std::endl;
-    }
+    *outputStream << logMessage;
     
     // 输出到文件（不带颜色）
     if (logToFile && fileStream.is_open()) {

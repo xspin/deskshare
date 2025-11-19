@@ -3,9 +3,6 @@
 #include <vector>
 #include <iostream>
 
-#include "capturer_win.h"
-
-// 引入 GDI+ 命名空间
 using namespace Gdiplus;
 
 class GdiplusInitializer {

@@ -9,7 +9,6 @@
 #include <openssl/evp.h>
 
 #include "websocket.h"
-#include "platform.h"
 
 #ifdef PLATFORM_MACOS
 #include <machine/endian.h>

@@ -11,43 +11,74 @@
 class CapturerManager {
 public:
     CapturerManager()
-    : loop(nullptr), timestamp(0), min_interval(10), quality(0.1) {
+    : loop(nullptr), timestamp(0), min_interval(100), quality(0.1), avg_interval(0) {
     }
 
     ~CapturerManager() {}
 
     void setup(uv_loop_t* loop, int max_fps, float quality) {
-        this->loop = loop;
+        if (loop) this->loop = loop;
         min_interval = 1000 / max_fps;
         this->quality = quality;
+        avg_interval = min_interval;
     }
 
-    int timeToNextFrame() {
-        uint64_t ts = uv_now(loop);
-        return timestamp + min_interval - ts;
+    int timeToNextFrame(size_t id) {
+        auto it = captime.find(id);
+        if (it != captime.end()) {
+            return it->second + min_interval - uv_now(loop);
+        }
+        captime[id] = uv_now(loop);
+        return 0;
     }
 
-    std::pair<const char*, size_t> getJpeg() {
-        uint64_t ts = uv_now(loop);
-        if (ts - timestamp > min_interval) {
+    std::pair<const char*, size_t> getJpeg(size_t id) {
+        updateInterval(id);
+        uint64_t now = uv_now(loop);
+        if (now - timestamp >= avg_interval) {
             if (!cap.capture(quality)) {
                 LOG_WARNING_STREAM << "capture failed";
             }
-            timestamp = ts;
+            g_config.frames++;
+            timestamp = now;
         }
+        captime[id] = now;
+        g_config.bytes += cap.jpg.size();
+        if (g_config.bytes > (1<<30)) g_config.bytes = 0;
         return {reinterpret_cast<char*>(cap.jpg.data()), cap.jpg.size()};
     }
 
-    void requestStart(const std::string& ip, uint16_t port) {
-        std::string key = ip + ":" + std::to_string(port);
-        reqs[key] = std::time(nullptr);
-        LOG_INFO_STREAM << key << " Enter. Remote Clients: " << reqs.size();
+    void updateInterval(size_t id) {
+        if (min_interval >= 100) { // <= 10 fps
+            avg_interval = min_interval;
+            return;
+        }
+
+        const float alpha = 0.6;
+        auto it = captime.find(id);
+        if (it != captime.end()) {
+            uint64_t dt = uv_now(loop) - captime[id];
+            avg_interval = alpha * dt + (1.0 - alpha) * avg_interval;
+        }
+
+        if (avg_interval < min_interval) {
+            avg_interval = min_interval;
+        }
     }
 
-    void requestEnd(const std::string& ip, uint16_t port) {
+    void requestStart(const std::string& ip, uint16_t port, size_t id) {
+        std::string key = ip + ":" + std::to_string(port);
+        reqs[key] = std::time(nullptr);
+        LOG_INFO_STREAM << key << " id-" << id << " Enter. Remote Clients: " << reqs.size();
+        g_config.clients = reqs.size();
+    }
+
+    void requestEnd(const std::string& ip, uint16_t port, size_t id) {
         std::string key = ip + ":" + std::to_string(port);
         reqs.erase(key);
-        LOG_INFO_STREAM << key << " Leave. Remote Clients: " << reqs.size();
+        LOG_INFO_STREAM << key << " id-" << id << " Leave. Remote Clients: " << reqs.size();
+        g_config.clients = reqs.size();
+        captime.erase(id);
     }
 
     std::string listRequests() {
@@ -57,7 +88,14 @@ public:
             ss << "<li>" <<  key << "&emsp;" << utils::getTime(t) << "</li>";
         }
         ss << "</ul>";
+        ss << "<p>FPS: " << 1000.0/avg_interval << "</p>";
         return ss.str();
+    }
+
+    void stop() {
+        reqs.clear();
+        captime.clear();
+        g_config.clients = 0;
     }
 
 private:
@@ -66,11 +104,13 @@ private:
     uint64_t timestamp;
     uint64_t min_interval; // ms
     float quality;
+    uint64_t avg_interval;
 
     std::unordered_map<std::string, time_t> reqs;
+    std::unordered_map<size_t, uint64_t> captime;
 };
 
-#define IDL_TIMEOUT 60000 // 60 seconds
+#define IDL_TIMEOUT 30000 // ms
 
 class TimeoutTimerQueue {
 
@@ -107,11 +147,19 @@ public:
         timers[client_id] = std::make_pair(uv_now(loop), timeout);
     }
 
+    void pop(size_t client_id) {
+        timers.erase(client_id);
+    }
+
     void refresh(size_t client_id) {
         auto it = timers.find(client_id);
         if (it != timers.end()) {
             it->second.first = uv_now(loop);
         }
+    }
+
+    void stop() {
+        timers.clear();
     }
 
 private:
@@ -156,31 +204,44 @@ static TimeoutTimerQueue s_timeoutQueue;
 
 static void initStreamRoutes(HttpServer& server) {
     Response mjpegResp([](std::ostream& body, Response* self) {
-        int d = s_cap.timeToNextFrame();
+        int d = s_cap.timeToNextFrame(self->getClientId());
         if (d > 0) {
             self->setDelayOnce(d);
             return;
         }
-        auto [frame, size] = s_cap.getJpeg();
+        auto [frame, size] = s_cap.getJpeg(self->getClientId());
 
-        body << "--frame\r\n" "Content-Type: image/jpeg\r\n";
-        body << "Content-Length: " + std::to_string(size);
-
-        body << "\r\n\r\n";
+        body << "--jpegframe\r\n"
+            << "Content-Type: image/jpeg\r\n"
+            << "Content-Length: " << size << "\r\n";
+        body << "\r\n";
         body.write(frame, size);
-        body << "\r\n\r\n";
+        body << "\r\n";
         self->markRepeat();
-    }, "multipart/x-mixed-replace; boundary=frame");
+    }, "multipart/x-mixed-replace; boundary=jpegframe", HttpStatus::OK, {
+        {"Cache-Control", "no-cache"},
+        {"Pragma", "no-cache"},
+        {"Access-Control-Allow-Origin", "*"}
+    });
 
     mjpegResp.onRequestStart = [](const std::string& ip, uint16_t port, Response* resp) {
-        s_cap.requestStart("*" + ip, port);
+        s_cap.requestStart("*" + ip, port, resp->getClientId());
     };
 
     mjpegResp.onRequestEnd = [](const std::string& ip, uint16_t port, Response* resp) {
-        s_cap.requestEnd("*" + ip, port);
+        s_cap.requestEnd("*" + ip, port, resp->getClientId());
     };
 
     server.addRoute("GET", "/mjpeg", mjpegResp);
+
+    server.addRoute("OPTIONS", "/mjpeg", Response([](std::ostream& os, Response* self) {
+        // No body for OPTIONS response
+    }, "text/plain", HttpStatus::NO_CONTENT, {
+        {"Access-Control-Allow-Origin", "*"},
+        {"Access-Control-Allow-Methods", "GET, OPTIONS"},
+        {"Access-Control-Allow-Headers", "*"},
+        {"Access-Control-Max-Age", "86400"}
+    }));
 
     Response wsResp([](std::ostream& os, Response* self) {
         if (self->getWsFrameType() == WsFrameType::TEXT) {
@@ -189,41 +250,50 @@ static void initStreamRoutes(HttpServer& server) {
                 os << WsClient::pack_text_frame("DIFF message");
             } else if (data == "STREAM:FULL") {
                 s_timeoutQueue.refresh(self->getClientId());
-                int d = s_cap.timeToNextFrame();
+                int d = s_cap.timeToNextFrame(self->getClientId());
                 if (d > 0) {
                     self->setDelayOnce(d);
-                    return;
+                } else {
+                    auto [frame, size] = s_cap.getJpeg(self->getClientId());
+                    os << WsClient::pack_binary_frame(frame, size);
                 }
-                auto [frame, size] = s_cap.getJpeg();
-                os << WsClient::pack_binary_frame(frame, size);
             }
         }
     });
 
     wsResp.onRequestStart = [](const std::string& ip, uint16_t port, Response* resp) {
-        s_cap.requestStart(ip, port);
+        s_cap.requestStart(ip, port, resp->getClientId());
         s_timeoutQueue.push(resp->getClientId(), IDL_TIMEOUT);
     };
 
     wsResp.onRequestEnd = [](const std::string& ip, uint16_t port, Response* resp) {
-        s_cap.requestEnd(ip, port);
+        s_cap.requestEnd(ip, port, resp->getClientId());
+        s_timeoutQueue.pop(resp->getClientId());
     };
 
     server.addWsRoute("/stream", wsResp);
 }
 
+void stop() {
+    s_timeoutQueue.stop();
+    s_cap.stop();
+}
+
+void setup() {
+    s_cap.setup(nullptr, g_config.fps, g_config.quality);
+}
+
 void init(uv_loop_t* loop, HttpServer& server) {
 
-    s_cap.setup(loop, g_args.fps, g_args.quality);
-
     s_timeoutQueue.start(loop, &server, IDL_TIMEOUT);
+    s_cap.setup(loop, g_config.fps, g_config.quality);
 
     initStreamRoutes(server);
 
     server.addRoute("GET", "/info", Response([](std::ostream& os, Response* self) {
         os << utils::renderTemplate(info, {
             {"version", APP_VERSION},
-            {"options", g_args.str()},
+            {"options", g_config.str()},
             {"time", utils::getTime()},
             {"clients", s_cap.listRequests()}
         });

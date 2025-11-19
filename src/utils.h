@@ -15,9 +15,12 @@ struct Args {
     bool debug = false;
     int port = 2333;
     float quality = 0.6;
-    int fps = 10;
+    int fps = 7;
     int timeout = 3600; //seconds
     bool color = 0;
+    size_t clients = 0;
+    size_t frames = 0;
+    size_t bytes = 0;
 
     std::string str() {
         std::stringstream ss;
@@ -31,7 +34,7 @@ struct Args {
     }
 };
 
-extern Args g_args;
+extern Args g_config;
 
 namespace utils {
 
@@ -46,6 +49,7 @@ std::string renderTemplate(const std::string& tpl, std::unordered_map<std::strin
 
 std::string getMimeType(const std::string& filename); 
 
+std::string speedString(size_t bytes);
 
 template <typename T>
 struct is_string_like : std::false_type {};

@@ -17,9 +17,10 @@ class WsJpgPlayer {
     this.bytes = 0;
     this.speed = 0;
     this.alpha = 0.6;
+    this.notify;
 
-    this.setupWs();
     this.setupCanvas();
+    this.play();
 
     const interval = 3.0;
     setInterval(()=>{
@@ -44,7 +45,7 @@ class WsJpgPlayer {
     this.ws = new WebSocket(this.url);
     this.ws.onopen = () => {
       console.log('WebSocket Connected', this.url);
-      this.play();
+      this.nextFrame(this.full);
     };
 
     this.ws.onmessage = (event) => {
@@ -72,9 +73,11 @@ class WsJpgPlayer {
     };
 
     this.ws.onclose = (event) => {
-      console.warn('WS Disconnected. Code:', event.code, 'Reason:', event.reason);
+      console.log('WS Disconnected. Code:', event.code, 'Reason:', event.reason);
       this.stop();
-      this.notify();
+      if (event.code !== 1000) {
+        this.notify('连接已关闭!');
+      }
     };
 
   }
@@ -130,7 +133,7 @@ class WsJpgPlayer {
     try {
       if (this.ws.readyState !== WebSocket.OPEN) {
         console.warn("WS not ready:", this.ws.readyState);
-        this.setupWs();
+        // this.setupWs();
       } else {
         this.ws.send(type);
       }
@@ -140,23 +143,21 @@ class WsJpgPlayer {
     }
   }
 
-  notify() {
-    alert("请求失败，请刷新页面重试！");
-  }
 
   play() {
     console.log("Play");
     this.isPlaying = true;
-    this.nextFrame(this.full);
+    this.setupWs();
   }
 
   pause() {
+    this.ws.close(1000, 'pause');
     this.stop();
-    this.drawPlay();
     console.log("Pause");
   }
 
   stop() {
+    this.drawPlay();
     this.isPlaying = false;
     this.delay = 0;
   }
@@ -244,25 +245,6 @@ class WsJpgPlayer {
     this.ctx.fillText(new Date().toLocaleTimeString(), width / 2, height / 2 + 30);
   }
 
-  drawPause() {
-    const w = this.canvas.width / this.pixelRatio;
-    const h = this.canvas.height / this.pixelRatio;
-    const centerX = w / 2;
-    const centerY = h / 2;
-    const width = 15;   // 单个矩形宽度
-    const height = 40;  // 矩形高度
-    const gap = 10;     // 两个矩形间距
-
-    const leftX = centerX - width - gap / 2;
-    const rightX = centerX + gap / 2;
-    const topY = centerY - height / 2;
-
-    this.ctx.fillStyle = 'lightblue';
-
-    this.ctx.fillRect(leftX, topY, width, height);
-    this.ctx.fillRect(rightX, topY, width, height);
-  }
-
   drawPlay() {
     const width = this.canvas.width / this.pixelRatio;
     const height = this.canvas.height / this.pixelRatio;
@@ -278,9 +260,10 @@ class WsJpgPlayer {
     // this.drawTriangle(x-dw/2, y-dh/2, triWidth+dw, triHeight+dh);
     // this.ctx.fillStyle = 'black';
     // this.ctx.fill();
+    this.ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+    this.ctx.fillRect(0, 0, width, height);
 
     this.drawTriangle(x, y, triWidth, triHeight);
-    // this.ctx.fillStyle = 'lightblue';
     this.ctx.fillStyle = `hsl(${Date.now() / 10 % 360}, 70%, 50%)`;
     this.ctx.fill();
   }
@@ -305,11 +288,41 @@ function playOrPause() {
   }
 }
 
+const alertBox = document.getElementById('alertBox');
+const alertText = document.getElementById('alertText');
+const closeBtn = document.getElementById('closeBtn');
+
+function hideAlert() {
+  alertBox.style.display = 'none';
+}
+
+closeBtn.addEventListener('click', hideAlert);
+
+function showAlert(message) {
+    alertText.textContent = message;
+    alertBox.style.display = 'block';
+
+    setTimeout(() => {
+        hideAlert();
+    }, 3000);
+}
+
 (function init() {
   const canvas = document.getElementById('video');
   canvas.onclick = (e)=>playOrPause();
+  let host = window.location.host || "localhost:2333";
+  player = new WsJpgPlayer(canvas, 'ws://' + host + '/stream');
+  player.notify = (msg)=>{
+    if (msg) {
+      showAlert(msg);
+    } else {
+      showAlert("连接失败，请重试！");
+    }
+  };
 
-  player = new WsJpgPlayer(canvas, 'ws://' + window.location.host + '/stream');
+  window.addEventListener('beforeunload', function(e) {
+    player.ws.close(1000, 'page unload');
+  });
 
   setInterval(() => {
     let fps = player.getFPS();

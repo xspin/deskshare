@@ -1,9 +1,11 @@
 #!/bin/bash
 
+set -x
 # npm install terser -g
 
 terser wsjpeg.js -o wsjpeg.min.js -m -c
 terser mjpeg.js -o mjpeg.min.js -m -c
+# cp mjpeg.js mjpeg.min.js
 
 OUTPUT=include
 

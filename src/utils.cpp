@@ -2,9 +2,8 @@
 #include <unistd.h>
 #include <algorithm>
 #include "utils.h"
-#include "platform.h"
 
-Args g_args;
+Args g_config;
 
 namespace utils {
 
@@ -19,14 +18,18 @@ int parse_args(Args& args, int argc, char* argv[]) {
         << "    -f FPS       specify max fps (default " << args.fps << ")\n"
         << "    -t SECONDS   idl timeout to exit (default " << args.timeout << ", 0 for infinity)\n"
         << "    -c           colored log output (default disabled on windows)\n"
+        << "    -v           show version info\n"
         << "    -d           log in debug level";
 
     int opt;
-    while ((opt = getopt(argc, argv, "t:f:q:p:dhc")) != -1) {
+    while ((opt = getopt(argc, argv, "t:f:q:p:dhcv")) != -1) {
         switch (opt) {
+            case 'v':
+                std::cout << "DeskShare version " << APP_VERSION << std::endl;
+                return 1;
             case 't':
                 args.timeout = std::stoi(optarg);
-                if (args.timeout < 0) {
+                if (args.timeout < 1) {
                     std::cerr << "invalid timeout: " << args.timeout << std::endl;
                     return -1;
                 }
@@ -42,7 +45,11 @@ int parse_args(Args& args, int argc, char* argv[]) {
                 }
                 break;
             case 'f':
-                args.fps = std::stoi(optarg); break;
+                args.fps = std::stoi(optarg);
+                if (args.fps < 1) {
+                    std::cerr << "invalid fps: " << args.fps << std::endl;
+                    return 1;
+                }
             case 'c':
                 args.color = true; break;
             case 'd':
@@ -191,6 +198,20 @@ std::string urlDecode(const std::string& str) {
     }
     
     return result;
+}
+
+std::string speedString(size_t bps) {
+    size_t KB = 1024;
+    size_t MB = KB * 1024;
+    std::stringstream ss;
+    if (bps >= MB) {
+        ss << bps/MB << " MB/s";
+    } else if (bps >= KB) {
+        ss << bps/KB << " KB/s";
+    } else {
+        ss << bps << " B/s";
+    }
+    return ss.str();
 }
 
 } // namespace

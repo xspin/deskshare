@@ -10,6 +10,33 @@
       background-color: black;
     }
 
+    .alert-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background-color: #fff3cd;
+        color: #856404;
+        padding: 15px;
+        border: 1px solid #ffeeba;
+        border-radius: 4px;
+        text-align: center;
+        display: none;
+        margin-top: 0;
+        opacity: 0.7;
+        z-index: 1000;
+    }
+    .close-btn {
+        background: none;
+        border: none;
+        color: #856404;
+        font-size: 18px;
+        cursor: pointer;
+        float: right;
+        margin-top: -5px;
+        margin-right: 5px;
+    }
+
     div#info {
       position: absolute;
       top: 10px;
@@ -28,10 +55,29 @@
     div#info:hover {
       background-color: black;
     }
+
+    #toggleBtn {
+      background-color: gray;
+      opacity: 0.5;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 18px;
+      width: 30px;
+      height: 30px;
+      border: none;
+    }
+    #toggleBtn:hover {
+      opacity: 1;
+    }
   </style>
 </head>
 
 <body>
+  <div class="alert-container" id="alertBox">
+    <button class="close-btn" id="closeBtn">&times;</button>
+    <span id="alertText"></span>
+  </div>
+
   <div id="info">
     <a id="fps"></a>
     <a id="speed"></a>
@@ -43,7 +89,36 @@
     <canvas id="video" style=" height: 100%;"></canvas>
   </div>
 
+  <div style="position: absolute; bottom: 20px; right: 20px; z-index: 100;">
+    <button id="toggleBtn">▣</button>
+  </div>
+
   <script src="wsjpeg.min.js"></script>
+  <script>
+    const body = document.body;
+    const btn = document.getElementById('toggleBtn');
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            body.requestFullscreen().catch(err => {
+                alert(`fullscreen failed: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) {
+            btn.textContent = '🅧';
+        } else {
+            btn.textContent = '▣';
+        }
+    });
+
+    btn.addEventListener('click', toggleFullscreen);
+  </script>
 </body>
 
 </html>

@@ -122,6 +122,7 @@ static http_write_req* new_http_write_req(client_context* ctx, uv_stream_t* hand
     req->handle = handle;
     req->resp = resp;
     req->resp.setClientId(ctx->id);
+    req->resp.setLoop(handle->loop);
     ctx->reqs++;
     LOG_DEBUG_STREAM << "new http_write_req " << req << " reqs " << ctx->reqs << " " << ctx;
 
@@ -133,10 +134,11 @@ static http_write_req* new_http_write_req(client_context* ctx, uv_stream_t* hand
 }
 
 static void release_http_write_req(http_write_req* req) {
-    LOG_DEBUG_STREAM << "delete http_write_req " << req;
+    LOG_DEBUG_STREAM << "delete http_write_req " << req << " ctx " << req->ctx;
     if (req->resp.onRequestEnd) {
         req->resp.onRequestEnd(req->ctx->addr.first, req->ctx->addr.second, &req->resp);
     }
+    req->ctx->ws_req = nullptr;
     --req->ctx->reqs;
     if (req->ctx->reqs == 0 && req->ctx->closed) {
         LOG_DEBUG_STREAM << "free client " << req->ctx;
@@ -204,6 +206,7 @@ void Response::init() {
     delay = 0;
     delay_timer = nullptr;
     client_id = 0;
+    loop = nullptr;
 }
 
 Response::~Response() {
@@ -217,7 +220,11 @@ Response::~Response() {
 void Response::initDelayTimer() {
     if (delay_timer == nullptr) {
         delay_timer = new uv_timer_t;
-        if (uv_timer_init(uv_default_loop(), delay_timer)) {
+        if (!loop) {
+            LOG_ERROR_STREAM << "uv loop is null";
+            return;
+        }
+        if (uv_timer_init(loop, delay_timer)) {
             LOG_ERROR_STREAM << "delay_timer init failed" ;
         }
     }
@@ -225,6 +232,10 @@ void Response::initDelayTimer() {
 
 void Response::setDelayOnce(uint64_t delay) {
     this->delay = delay;
+}
+
+void Response::setLoop(uv_loop_t* loop) {
+    this->loop = loop;
 }
 
 void Response::next(const std::function<void(std::stringstream&)>& callback) {
@@ -344,7 +355,7 @@ std::string Response::str() const {
     return response_stream.str();
 }
 
-HttpServer::HttpServer(uv_loop_t* loop, uint32_t timeout) : loop(loop), timeout(timeout) {
+HttpServer::HttpServer(uv_loop_t* loop) : loop(loop) {
     memset(&server, 0, sizeof(server));
     write_timer.data = this;
     if (uv_timer_init(loop, &write_timer)) {
@@ -355,6 +366,7 @@ HttpServer::HttpServer(uv_loop_t* loop, uint32_t timeout) : loop(loop), timeout(
         LOG_ERROR_STREAM << "timeout_timer init failed";
     }
     client_counter = 0;
+    idl_time = 0;
 }
 
 HttpServer::~HttpServer() {
@@ -368,19 +380,14 @@ HttpServer::~HttpServer() {
 }
 
 void HttpServer::idle() {
-    if (timeout) {
-        uv_timer_start(&timeout_timer, [](uv_timer_t* handle){
-            LOG_WARNING_STREAM << "Timed out, stopping loop";
-            uv_stop(handle->loop);
-        }, timeout * 1000, 0);
-    }
+    idl_time = uv_now(loop);
 }
 
 void HttpServer::on_send(uv_timer_t* handle) {
     HttpServer* self = static_cast<HttpServer*>(handle->data);
 
     if (self->write_queue.empty()) {
-        uv_timer_stop(handle);
+        uv_timer_stop(handle); // stop dequeue
         self->idle();
     } else {
         http_write_req* write_req = self->write_queue.front();
@@ -405,7 +412,6 @@ void HttpServer::dequeueWriteQueue() {
     if (!uv_is_active((uv_handle_t*)&write_timer)) {
         uv_timer_start(&write_timer, on_send, 0, 1); // repeat
     }
-    uv_timer_stop(&timeout_timer);
 }
 
 void HttpServer::enqueueWriteRequest(http_write_req* write_req) {
@@ -429,6 +435,8 @@ bool HttpServer::start(const std::string& host, int port) {
         LOG_ERROR_STREAM << "Failed to initialize TCP server";
         return false;
     }
+
+    server.data = this;
     
     // 绑定地址
     struct sockaddr_in addr;
@@ -447,38 +455,60 @@ bool HttpServer::start(const std::string& host, int port) {
         LOG_ERROR_STREAM << "Failed to listen: " << uv_strerror(r);
         return false;
     }
-
-    server.data = this;
     
     LOG_INFO("Server is running on %s:%d", host.c_str(), port);
+
+    uv_update_time(loop);
+    idle();
+
     if (timeout) {
         LOG_INFO_STREAM << "Timeout: " << timeout << " seconds";
+        // uv_timer_stop(&timeout_timer);
+        uv_timer_start(&timeout_timer, [](uv_timer_t* handle){
+            HttpServer* self = static_cast<HttpServer*>(handle->data);
+            if (uv_now(handle->loop) - self->idl_time < self->timeout * 1000) {
+                return; // not timeout
+            }
+            LOG_WARNING_STREAM << "idle timed out";
+            if (self->timeout_callback) {
+                self->timeout_callback(handle, self);
+            } else {
+                uv_stop(handle->loop);
+            }
+        }, 0, std::min(60*1000u, timeout * 1000)+1000);
     }
-
-    idle();
 
     return true;
 }
 
-void HttpServer::stop() {
-    if (uv_is_active((uv_handle_t*)&server)) {
-        uv_close((uv_handle_t*)&server, nullptr);
-    }
+void HttpServer::stop(uv_close_cb cb) {
+    uv_timer_stop(&write_timer);
+    uv_timer_stop(&timeout_timer);
 
     LOG_DEBUG_STREAM << "Release write queue: " << write_queue.size();
 
     while (!write_queue.empty()) {
         http_write_req* write_req = write_queue.front();
         write_queue.pop();
-        write_req->inqueue = false;
-        auto ctx = write_req->ctx;
-        ctx->closed = true;
-        if (onClientClosed) {
-            onClientClosed(ctx->addr.first, ctx->addr.second);
-        }
         release_http_write_req(write_req);
     }
-    LOG_INFO_STREAM << "HTTP server stoped";
+
+    for (auto& [id, client] : clients) {
+        if (!client->closed) {
+            if (onClientClosed) {
+                onClientClosed(client->addr.first, client->addr.second);
+            }
+            closeStream((uv_stream_t*)&client->handle);
+        }
+    }
+    client_counter = 0;
+    clients.clear();
+
+    if (uv_is_active((uv_handle_t*)&server)) {
+        uv_close((uv_handle_t*)&server, cb);
+    } else {
+        if (cb) cb((uv_handle_t*)&server);
+    }
 }
 
 void HttpServer::addRoute(const std::string& method, const std::string& path, 
@@ -497,6 +527,10 @@ void HttpServer::addWsRoute(const std::string& path, const Response& response) {
     LOG_DEBUG_STREAM << "Added ws route: " << " " << p;
 }
 
+void HttpServer::setTimeout(uint32_t timeout, std::function<void(uv_timer_t*, HttpServer*)> cb) {
+    this->timeout = timeout;
+    timeout_callback = cb;
+}
 
 void HttpServer::setOnClientConnected(ClientCallbackFn fn) {
     onClientConnected = fn;
@@ -603,7 +637,9 @@ void HttpServer::on_read(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf
         }
     } else if (nread < 0) {
         if (nread != UV_EOF) {
-            LOG_WARNING_STREAM << "Read error: " << uv_strerror(nread);
+            LOG_WARNING_STREAM << "Read error: " << uv_strerror(nread) << ctx;
+        } else {
+            LOG_DEBUG_STREAM << "Read EOF from client " << ctx;
         }
         uv_close((uv_handle_t*)client, on_close);
     }
@@ -616,7 +652,9 @@ void HttpServer::on_read(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf
 void HttpServer::on_write(uv_write_t* req, int status) {
     http_write_req* write_req = static_cast<http_write_req*>(req->data);
     LOG_DEBUG_STREAM << "Async response sent " << write_req->buf.len << " bytes, " << write_req->ctx;
+    LOG_DEBUG_STREAM << "\n" << write_req->buf.base;
     if (status) {
+        LOG_DEBUG_STREAM << write_req->buf.base;
         LOG_WARNING_STREAM << "uv_write error: " << uv_strerror(status) << " " << write_req->ctx;
     }
     if (write_req->resp.isRepeat()) {
@@ -643,7 +681,7 @@ void HttpServer::removeClient(size_t client_id) {
     clients.erase(client_id);
 }
 
-void HttpServer::closeClient(uv_stream_t* client) {
+void HttpServer::closeStream(uv_stream_t* client) {
     if (client) {
         uv_read_stop(client);
         uv_close((uv_handle_t*)client, on_close);
@@ -653,7 +691,7 @@ void HttpServer::closeClient(uv_stream_t* client) {
 void HttpServer::closeClient(size_t client_id) {
     auto it = clients.find(client_id);
     if (it != clients.end()) {
-        closeClient((uv_stream_t*)&it->second->handle);
+        closeStream((uv_stream_t*)&it->second->handle);
         clients.erase(it);
     }
 }
@@ -674,6 +712,7 @@ void HttpServer::on_close(uv_handle_t* handle) {
     ctx->closed = true;
     if (ctx->reqs == 0) {
         LOG_DEBUG_STREAM << "free client " << ctx;
+        handle->data = nullptr;
         delete ctx;
     }
 }
@@ -714,7 +753,7 @@ static void sendWsClose(uv_stream_t* client, WsErrorCode code, const std::string
     uv_write(req, client, &buf, 1, [](uv_write_t* req, int status) {
         uv_stream_t* client = static_cast<uv_stream_t*>(req->data);
         client_context* ctx = static_cast<client_context*>(client->data);
-        ctx->server->closeClient(client);
+        ctx->server->closeStream(client);
         delete req;
     });
 
@@ -734,7 +773,7 @@ void HttpServer::handleWsRequest(uv_stream_t* client, const std::string& request
         }
 
         LOG_INFO_STREAM << "WS Request: " << req.method << " " << req.url << " " << client->data;
-        LOG_DEBUG_STREAM << request_data;
+        LOG_DEBUG_STREAM << "\n" << request_data;
         
         if (req.method != "GET") {
             sendWsClose(client, WsErrorCode::PROTOCOL_ERROR);
@@ -769,7 +808,7 @@ void HttpServer::handleWsRequest(uv_stream_t* client, const std::string& request
         return;
     }
 
-    LOG_DEBUG_STREAM << "Received ws frame " << wsFrameTypeToString(type) << " " << frame;
+    LOG_DEBUG_STREAM << "Received ws frame " << wsFrameTypeToString(type) << "\n" << frame;
 
     http_write_req* write_req = ctx->ws_req;
 
@@ -794,6 +833,7 @@ void HttpServer::handleHttpRequest(uv_stream_t* client, const std::string& reque
     }
     
     LOG_DEBUG_STREAM << client->data << " Request: " << req.method << " " << req.url;
+    LOG_DEBUG_STREAM << "\n" << request_data;
 
     auto response = findResponse(req.method, req.url);
     if (response) {
@@ -857,7 +897,7 @@ void HttpServer::sendHttpResponse(uv_stream_t* client, const Response& resp) {
         }
 
         if (write_req->resp.getContentType().find("text") != std::string::npos) {
-            LOG_DEBUG_STREAM << response_str;
+            LOG_DEBUG_STREAM << "\n" << response_str;
         }
 
         set_http_write_buf(write_req, response_str);

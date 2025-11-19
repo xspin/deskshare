@@ -16,6 +16,13 @@ enum class LogLevel {
     ERR     // ERROR conflicts with Windows headers
 };
 
+#define LOG_STIME   0x1
+#define LOG_TIME    0x2
+#define LOG_LEVEL   0x4
+#define LOG_LINE    0x8
+#define LOG_FUNC    0xa
+#define LOG_ALL (LOG_TIME|LOG_LEVEL|LOG_LINE|LOG_FUNC)
+
 class Logger {
 private:
     std::ostream* outputStream;
@@ -24,6 +31,7 @@ private:
     std::mutex logMutex;
     std::ofstream fileStream;
     bool logToFile;
+    unsigned int mask;
     
     std::string getLevelString(LogLevel level);
     std::string getColoredLevelString(LogLevel level);
@@ -34,9 +42,12 @@ public:
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
     
+    void setOutStream(std::ostream* os);
+    LogLevel getLogLevel();
     void setLogLevel(LogLevel level);
-    void setUseColor(bool color);
+    void setColor(bool color);
     void setLogFile(const std::string& filename);
+    void setMask(unsigned int mask);
     
     void log(LogLevel level, const std::string& function, int line,
         const std::string& file, const char *format, ...); 
@@ -64,7 +75,9 @@ public:
 
     template<typename T>
     LogStream& operator<<(const T& value) {
-        os << value;
+        if (level >= gLogger.getLogLevel()) {
+            os << value;
+        }
         return *this;
     }
 };
@@ -86,13 +99,14 @@ static inline Logger& getLogger() {
 #define LOG_ERROR(...) \
     gLogger.log(LogLevel::ERR, __FUNCTION__, __LINE__, __FILE__, __VA_ARGS__)
 
+
 // 流式输出日志宏
 #define LOG_STREAM(level) \
     LogStream(level, __FUNCTION__, __LINE__, __FILE__)
 
-#define LOG_DEBUG_STREAM LOG_STREAM(LogLevel::DEBUG)
-#define LOG_INFO_STREAM LOG_STREAM(LogLevel::INFO)
-#define LOG_WARNING_STREAM LOG_STREAM(LogLevel::WARNING)
-#define LOG_ERROR_STREAM LOG_STREAM(LogLevel::ERR)
+#define LOG_DEBUG_STREAM        LOG_STREAM(LogLevel::DEBUG)
+#define LOG_INFO_STREAM         LOG_STREAM(LogLevel::INFO)
+#define LOG_WARNING_STREAM      LOG_STREAM(LogLevel::WARNING)
+#define LOG_ERROR_STREAM        LOG_STREAM(LogLevel::ERR)
 
 #endif // LOGGER_H

@@ -3,6 +3,8 @@
 # export MallocStackLogging=0
 # export MallocStackLoggingNoCompact=0
 
+ulimit -c 2097152
+
 ARGS=${@:1}
 
 hasArg() {
@@ -23,6 +25,13 @@ fi
 
 BUILD_FLAGS=
 TARGET=./build/bin/deskshare
+
+hasArg nogui
+if [ $? -eq 0 ]; then
+    BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_GUI=OFF"
+else
+    BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_GUI=ON"
+fi
 
 hasArg debug
 if [ $? -eq 0 ]; then
@@ -47,6 +56,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+
 hasArg lldb
 if [ $? -eq 0 ]; then
     lldb --batch -o "run" -o "thread backtrace all" --file $TARGET
@@ -59,3 +69,5 @@ if [ $? -eq 0 ]; then
     exec ${TARGET}
     exit $?
 fi
+
+sh ./app.sh

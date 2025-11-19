@@ -1,6 +1,5 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <iostream>
-#include "capturer_macos.h"
 
 // 截取指定显示器的全屏图像
 static CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
@@ -22,7 +21,7 @@ static CGImageRef captureScreenRect(CGDirectDisplayID displayID, CGRect rect) {
     return image;
 }
 
-std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float quality) {
+static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float quality) {
     std::vector<unsigned char> jpegData;
     if (!image) return jpegData;
 

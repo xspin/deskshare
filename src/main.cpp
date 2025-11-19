@@ -7,7 +7,6 @@
 #include "logger.h"
 #include "pages.h"
 #include "utils.h"
-#include "platform.h"
 
 
 static void signal_handler(uv_signal_t* handle, int signum) {
@@ -17,12 +16,12 @@ static void signal_handler(uv_signal_t* handle, int signum) {
 }
 
 int main(int argc, char* argv[]) {
-    if (utils::parse_args(g_args, argc, argv)) {
+    if (utils::parse_args(g_config, argc, argv)) {
         return -1;
     }
 
     Logger& log = getLogger();
-    if (g_args.debug) {
+    if (g_config.debug) {
         log.setLogLevel(LogLevel::DEBUG);
     } else {
         log.setLogLevel(LogLevel::INFO);
@@ -30,12 +29,12 @@ int main(int argc, char* argv[]) {
     // log.setLogFile("./test.log");
 
 #ifdef PLATFORM_WINDOWS
-    log.setUseColor(g_args.color);
+    log.setColor(g_config.color);
 #endif
 
     LOG_INFO_STREAM << "DeskShare " APP_VERSION " Start";
 
-    LOG_INFO_STREAM << g_args.str();
+    LOG_INFO_STREAM << g_config.str();
 
     uv_loop_t* loop = uv_default_loop();
 
@@ -47,11 +46,12 @@ int main(int argc, char* argv[]) {
     uv_timer_init(loop, &exit_timer);
     bool failed = false;
 
-    HttpServer server(loop, g_args.timeout);
+    HttpServer server(loop);
+    server.setTimeout(g_config.timeout);
     
     pages::init(loop, server);
  
-    int port = g_args.port;
+    int port = g_config.port;
     if (!server.start("0.0.0.0", port)) {
         failed = true;
         LOG_ERROR_STREAM << "Failed to start server on port " << port;

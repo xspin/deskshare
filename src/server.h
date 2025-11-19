@@ -29,13 +29,6 @@ enum class HttpStatus {
     SERVICE_UNAVAILABLE = 503,
 };
 
-// struct Stat {
-//     int connections;
-//     int bytes;
-//     int pkts;
-//     time_t start;
-// };
-
 struct client_context;
 
 struct http_write_req;
@@ -73,10 +66,13 @@ private:
 
     size_t client_id;
 
+    uv_loop_t* loop;
+
     void init();
+    void initDelayTimer();
 
 public:
-    Response(): request(nullptr), delay_timer(nullptr), client_id(0) {}
+    Response(): request(nullptr), delay_timer(nullptr), client_id(0), loop(nullptr) {}
 
     Response(const std::string& payload,
         const std::string& content_type="",
@@ -113,13 +109,12 @@ public:
     void setClientId(size_t id);
     size_t getClientId();
 
+    void setLoop(uv_loop_t* loop);
     void next(const std::function<void(std::stringstream&)>& callback);
 
     RequestCallbackFn onRequestStart;
     RequestCallbackFn onRequestEnd;
 
-private:
-    void initDelayTimer();
 };
 
 // HTTP 服务器类
@@ -127,24 +122,25 @@ class HttpServer {
     using ClientCallbackFn = std::function<void(const std::string&, uint16_t)>;
 
 public:
-    HttpServer(uv_loop_t* loop, uint32_t timeout=0);
+    HttpServer(uv_loop_t* loop);
     ~HttpServer();
 
     // 启动服务器
     bool start(const std::string& host, int port);
     
     // 停止服务器
-    void stop();
+    void stop(uv_close_cb cb=nullptr);
     
     // 添加路由处理函数
     void addRoute(const std::string& method, const std::string& path, const Response& response);
     void addWsRoute(const std::string& path, const Response& response);
 
+    void setTimeout(uint32_t timeout, std::function<void(uv_timer_t*, HttpServer*)> cb=nullptr);
     void setOnClientConnected(ClientCallbackFn);
     void setOnClientClosed(ClientCallbackFn);
     
     static std::string getStatusText(HttpStatus status_code);
-    void closeClient(uv_stream_t* handle);
+    void closeStream(uv_stream_t* handle);
     void closeClient(size_t client_id);
 
     size_t addClient(client_context* client);
@@ -182,6 +178,8 @@ private:
     uv_timer_t write_timer;
     uv_timer_t timeout_timer;
     uint32_t timeout; // seconds
+    uint64_t idl_time;
+    std::function<void(uv_timer_t*, HttpServer*)> timeout_callback;
     
     // 路由表: method -> path -> handler
     std::unordered_map<std::string, 

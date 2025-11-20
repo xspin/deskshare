@@ -254,6 +254,18 @@ static void initStreamRoutes(HttpServer& server) {
                 if (d > 0) {
                     self->setDelayOnce(d);
                 } else {
+                    auto [w, h] = Capturer::getResolution();
+                    auto [x, y] = Capturer::getCursorPos();
+                    std::stringstream ss;
+                    ss << "{"
+                        << "\"x\":" << x << ","
+                        << "\"y\":" << y << ","
+                        << "\"w\":" << w << ","
+                        << "\"h\":" << h << ","
+                        << "\"clients\":" << g_config.clients
+                        << "}";
+                    os << WsClient::pack_text_frame(ss.str());
+
                     auto [frame, size] = s_cap.getJpeg(self->getClientId());
                     os << WsClient::pack_binary_frame(frame, size);
                 }

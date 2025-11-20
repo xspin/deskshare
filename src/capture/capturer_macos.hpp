@@ -1,5 +1,8 @@
 #include <ApplicationServices/ApplicationServices.h>
+#include <CoreGraphics/CoreGraphics.h>
 #include <iostream>
+#include <vector>
+#include <string>
 
 // 截取指定显示器的全屏图像
 static CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
@@ -89,4 +92,23 @@ std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float qu
     CGImageRelease(imgRef);
 
     return jpeg;
+}
+
+std::pair<int,int> getScreenResolution() {
+    static int width = 0;
+    static int height = 0;
+    if (width == 0) {
+        CGDirectDisplayID main_display = CGMainDisplayID();
+        CGRect bounds = CGDisplayBounds(main_display);
+        width = (int)CGRectGetWidth(bounds);
+        height = (int)CGRectGetHeight(bounds);
+    }
+    return {width, height};
+}
+
+std::pair<int,int> getCursorLoc() {
+    CGEventRef event = CGEventCreate(nullptr);
+    CGPoint pos = CGEventGetLocation(event);
+    CFRelease(event);
+    return {pos.x, pos.y};
 }

@@ -20,7 +20,7 @@ class WsJpgPlayer {
     this.notify;
 
     this.setupCanvas();
-    this.play();
+    this.setupCursor();
 
     const interval = 3.0;
     setInterval(()=>{
@@ -29,6 +29,19 @@ class WsJpgPlayer {
       this.fps = this.smooth(this.fps, this.frameCount / interval);
       this.frameCount = 0;
     }, interval*1000);
+
+  }
+
+  setupCursor() {
+    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="100" height="100" viewBox="0 0 48 48">
+<path fill="#90a4ae" d="M36.149,25.242L18.579,9.055V7h-3.11c-0.065,0.003-2.192-0.003-2.192,2.182v25.836	c0,1.754,1.523,2.107,2.114,2.109h3.184v-2.08l2.649-2.43l3.9,8.918c0.367,0.92,1.264,1.403,2.153,1.447V43h3v-1.06l1.518-0.682	c0.528-0.234,0.924-0.654,1.116-1.185c0.203-0.559,0.156-1.179-0.117-1.715l-4.06-8.697l6.096-0.571l0.152-0.026	c1.292-0.317,1.699-1.125,1.828-1.579C37.023,26.727,36.774,25.856,36.149,25.242z"></path><path fill="#e0e0e0" stroke="#37474f" stroke-miterlimit="10" stroke-width="2" d="M29.137,41.156l-4.482-10.248l-5.377,4.932	c-0.656,0.559-1.912,0.307-1.912-0.822V9.182c0-1.154,1.325-1.516,2.031-0.822l19.12,17.616c0.576,0.566,0.723,1.76-0.717,2.114	l-7.528,0.705l4.66,9.982c0.33,0.648,0.082,1.311-0.489,1.565l-3.574,1.606C30.298,42.152,29.418,41.884,29.137,41.156z"></path>
+</svg>`;
+    const cursorUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+    this.rx = 0;
+    this.ry = 0;
+    this.cursorImg = new Image();
+    this.cursorImg.src = cursorUrl;
+    this.cursorSize = 20;
   }
 
   smooth(oldVal, newVal) {
@@ -44,6 +57,7 @@ class WsJpgPlayer {
   setupWs() {
     this.ws = new WebSocket(this.url);
     this.ws.onopen = () => {
+      this.isPlaying = true;
       console.log('WebSocket Connected', this.url);
       this.nextFrame(this.full);
     };
@@ -51,7 +65,16 @@ class WsJpgPlayer {
     this.ws.onmessage = (event) => {
       // console.log('Received type:', typeof event.data);
       if (typeof event.data === 'string') {
-        console.log('Received text:', event.data);
+        // console.log('Received text:', event.data);
+        try {
+          const obj = JSON.parse(event.data);
+          // console.log(obj);
+          this.rx = obj.x / obj.w;
+          this.ry = obj.y / obj.h;
+          this.clients = obj.clients;
+        } catch (err) {
+          console.log(err);
+        }
       } else if (event.data instanceof Blob) {
         // 二进制数据（Blob 类型）
         // console.log('收到二进制消息（Blob），大小:', event.data.size);
@@ -61,7 +84,7 @@ class WsJpgPlayer {
           this.bytes += event.data.size;
           this.delay = this.smooth(this.delay, new Date().getTime() - this.delayTimestamp);
 
-          this.nextFrame(this.full); // todo
+          this.nextFrame(this.full);
         }
       }
     };
@@ -83,19 +106,20 @@ class WsJpgPlayer {
   }
 
   setupCanvas() {
-    // 优化图像渲染设置
     // this.ctx.imageSmoothingEnabled = false;
     this.ctx.globalCompositeOperation = 'source-over';
 
-    // 设置填充样式
     this.ctx.fillStyle = '#000000';
 
-    // 设置初始尺寸
-    this.resizeCanvas();
+    const resizeCanvas = () => {
+      this.setupHighDPICanvas();
+      if (!this.isPlaying) {
+        this.drawPause();
+      }
+    }
+    resizeCanvas();
 
-    // 监听窗口和容器尺寸变化
-    window.addEventListener('resize', () => this.resizeCanvas());
-
+    window.addEventListener('resize', () => resizeCanvas());
   }
 
   setupHighDPICanvas() {
@@ -113,27 +137,18 @@ class WsJpgPlayer {
 
     // 缩放上下文
     this.ctx.scale(this.pixelRatio, this.pixelRatio);
-
-    // console.log(`高清 Canvas: ${displayWidth}x${displayHeight} @ ${this.pixelRatio}x`);
-  }
-
-  resizeCanvas() {
-    this.setupHighDPICanvas();
-    if (!this.isPlaying) {
-      this.drawPlay();
-    }
   }
 
   nextFrame(type) {
     if (!this.isPlaying) {
-      this.drawPlay();
+      this.drawPause();
       return;
     }
+
     this.delayTimestamp = new Date().getTime();
     try {
       if (this.ws.readyState !== WebSocket.OPEN) {
         console.warn("WS not ready:", this.ws.readyState);
-        // this.setupWs();
       } else {
         this.ws.send(type);
       }
@@ -143,10 +158,8 @@ class WsJpgPlayer {
     }
   }
 
-
   play() {
     console.log("Play");
-    this.isPlaying = true;
     this.setupWs();
   }
 
@@ -157,7 +170,7 @@ class WsJpgPlayer {
   }
 
   stop() {
-    this.drawPlay();
+    this.drawPause();
     this.isPlaying = false;
     this.delay = 0;
   }
@@ -199,10 +212,10 @@ class WsJpgPlayer {
 
   drawFrame(image) {
     if (!this.isPlaying) {
-      this.drawPlay();
+      this.drawPause();
       return;
     }
-    // 清除画布
+
     this.ctx.clearRect(0, 0, this.canvas.width / this.pixelRatio, this.canvas.height / this.pixelRatio);
 
     const canvasWidth = this.canvas.width / this.pixelRatio;
@@ -229,23 +242,13 @@ class WsJpgPlayer {
     }
 
     this.ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+    const x = drawX + drawWidth * this.rx - this.cursorSize/4;
+    const y = drawY + drawHeight * this.ry - this.cursorSize/4;
+    this.ctx.drawImage(this.cursorImg, x, y, this.cursorSize, this.cursorSize); 
   }
 
-  drawText(text) {
-    const width = this.canvas.width / this.pixelRatio;
-    const height = this.canvas.height / this.pixelRatio;
-
-    this.ctx.fillStyle = `hsl(${Date.now() / 10 % 360}, 70%, 50%)`;
-    this.ctx.fillRect(0, height / 3, width, height / 3);
-
-    this.ctx.fillStyle = '#fff';
-    this.ctx.font = '20px Arial';
-    this.ctx.textAlign = 'center';
-    this.ctx.fillText(text, width / 2, height / 2);
-    this.ctx.fillText(new Date().toLocaleTimeString(), width / 2, height / 2 + 30);
-  }
-
-  drawPlay() {
+  drawPause() {
     const width = this.canvas.width / this.pixelRatio;
     const height = this.canvas.height / this.pixelRatio;
 
@@ -255,11 +258,6 @@ class WsJpgPlayer {
     const x = width / 2 - triWidth / 4; // 向左微调一点更居中
     const y = height / 2 - triHeight / 2;
 
-    // const dw = 12;
-    // const dh = 20;
-    // this.drawTriangle(x-dw/2, y-dh/2, triWidth+dw, triHeight+dh);
-    // this.ctx.fillStyle = 'black';
-    // this.ctx.fill();
     this.ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
     this.ctx.fillRect(0, 0, width, height);
 
@@ -275,43 +273,32 @@ class WsJpgPlayer {
     this.ctx.lineTo(x, y + height); // 左下角
     this.ctx.closePath();
   }
-
-}
-
-var player;
-
-function playOrPause() {
-  if (player.isPlaying) {
-    player.pause();
-  } else {
-    player.play();
-  }
-}
-
-const alertBox = document.getElementById('alertBox');
-const alertText = document.getElementById('alertText');
-const closeBtn = document.getElementById('closeBtn');
-
-function hideAlert() {
-  alertBox.style.display = 'none';
-}
-
-closeBtn.addEventListener('click', hideAlert);
-
-function showAlert(message) {
-    alertText.textContent = message;
-    alertBox.style.display = 'block';
-
-    setTimeout(() => {
-        hideAlert();
-    }, 3000);
 }
 
 (function init() {
+
+  const alertBox = document.getElementById('alertBox');
+  const alertText = document.getElementById('alertText');
+  const closeBtn = document.getElementById('closeBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
   const canvas = document.getElementById('video');
-  canvas.onclick = (e)=>playOrPause();
   let host = window.location.host || "localhost:2333";
-  player = new WsJpgPlayer(canvas, 'ws://' + host + '/stream');
+  const player = new WsJpgPlayer(canvas, 'ws://' + host + '/stream');
+
+  const hideAlert = () => { alertBox.style.display = 'none'; };
+
+  const showAlert = (message) => {
+    alertText.textContent = message;
+    alertBox.style.display = 'block';
+    setTimeout(() => {hideAlert();}, 3000);
+  };
+
+  canvas.onclick = (e)=>{
+    if (!player.isPlaying) {
+      player.play();
+    }
+  };
+
   player.notify = (msg)=>{
     if (msg) {
       showAlert(msg);
@@ -320,23 +307,59 @@ function showAlert(message) {
     }
   };
 
-  window.addEventListener('beforeunload', function(e) {
-    player.ws.close(1000, 'page unload');
+
+  window.addEventListener('beforeunload', function() {
+    // player.ws.close(1000, 'page unload');
+    player.pause();
   });
 
+  closeBtn.addEventListener('click', hideAlert);
+
+  pauseBtn.addEventListener("click", function(){
+    if (player.isPlaying) {
+      player.pause();
+      pauseBtn.classList.add('play');
+      pauseBtn.classList.remove('pause');
+    } else {
+      player.play();
+      pauseBtn.classList.add('pause');
+      pauseBtn.classList.remove('play');
+    }
+  });
+
+  player.play();
+
+  const info_fps = document.getElementById('fps');
+  const info_delay = document.getElementById('delay');
+  const info_speed = document.getElementById('speed');
+  const info_state = document.getElementById('state');
+  const info_clients = document.getElementById('clients');
+
   setInterval(() => {
+    if (player.isPlaying) {
+      pauseBtn.classList.add('pause');
+      pauseBtn.classList.remove('play');
+    } else {
+      pauseBtn.classList.add('play');
+      pauseBtn.classList.remove('pause');
+    }
+
     let fps = player.getFPS();
-    fps = fps<0.1 ? '0' : fps.toFixed(2);
-    document.getElementById('fps').textContent = `${fps} fps`;
+    fps = player.isPlaying ? fps.toFixed(2) : '0';
+    info_fps.textContent = `${fps} fps`;
 
     const delay = player.getDelay();
-    document.getElementById('delay').textContent = `${delay} ms`;
+    info_delay.textContent = `${delay} ms`;
 
     const speed = player.getSpeed();
-    document.getElementById('speed').textContent = `${speed}`;
+    info_speed.textContent = `${speed}`;
 
     const state = player.isPlaying? '▶︎' : '🆇';
-    document.getElementById('state').textContent = `${state}`;
+    info_state.textContent = `${state}`;
+
+    const clients = player.isPlaying ? player.clients : '?';
+    info_clients.textContent = `${clients}`;
 
   }, 1000);
+
 })();

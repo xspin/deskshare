@@ -60,7 +60,11 @@
     setInterval(()=>{
       const fps = frames < k ? '0' : (frames/k).toFixed(2);
       document.getElementById("fps").textContent = `${fps} fps`;
-      if (fps == '0') delay = 0;
+      if (frames === 0) {
+        delay = 0;
+        btn.textContent = "Play ▶︎";
+        running = false;
+      }
       document.getElementById("delay").textContent = `${delay} ms`;
       frames = 0;
     }, k*1000);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(deskshare VERSION 1.1.0)
+project(deskshare VERSION 1.2.0)
 message("Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
 
 # WIN32 / UNIX / DARWIN 

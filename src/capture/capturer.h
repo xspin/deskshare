@@ -10,6 +10,9 @@ public:
     Capturer() {}
     ~Capturer() {}
 
+    static std::pair<int,int> getCursorPos();
+    static std::pair<int,int> getResolution();
+
     bool capture(float quality);
 
     std::vector<unsigned char> jpg;

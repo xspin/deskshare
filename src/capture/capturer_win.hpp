@@ -128,3 +128,24 @@ std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float qu
 
     return jpegData;
 }
+
+
+std::pair<int,int> getScreenResolution() {
+        // 方法 1：忽略系统缩放（获取物理像素）
+    int width = GetSystemMetrics(SM_CXSCREEN);  // 屏幕宽度（像素）
+    int height = GetSystemMetrics(SM_CYSCREEN); // 屏幕高度（像素）
+
+        // 方法 2：适配系统缩放（获取逻辑分辨率，如 1920x1080 缩放 150% 后为 1280x720）
+        // log_width = GetSystemMetrics(SM_CXFULLSCREEN);
+        // log_height = GetSystemMetrics(SM_CYFULLSCREEN);
+    return {width, height};
+}
+
+std::pair<int,int> getCursorLoc() {
+    POINT pos;
+    if (GetCursorPos(&pos)) {
+        return {pos.x, pos.y};
+    }
+    std::cerr << "GetCursorPos failed: " << GetLastError() << std::endl;
+    return {0, 0};
+}

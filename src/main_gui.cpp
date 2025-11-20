@@ -8,6 +8,7 @@
 #include "pages.h"
 #include "utils.h"
 #include "gui.h"
+#include "capture/capturer.h"
 
 std::atomic<bool> terminal(false);
 std::atomic<bool> running(false);
@@ -21,10 +22,10 @@ static void async_stop_cb(uv_async_t* handle) {
     HttpServer* server = static_cast<HttpServer*>(handle->data);
     pages::stop();
     server->stop([](uv_handle_t* handle){
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         uv_stop(handle->loop);
         LOG_INFO_STREAM << "HTTP Server stoped";
     });
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
 }
 
 static void awakeWorker() {
@@ -45,6 +46,22 @@ void worker() {
     uv_async_init(loop, &async_stop, async_stop_cb);
 
     LOG_INFO_STREAM << "DeskShare " APP_VERSION " Start";
+
+    auto [w, h] = Capturer::getResolution();
+    static int width = w;
+    static int height = h;
+
+    LOG_INFO_STREAM << "Screen Resolution: " << width << " x " << height;
+    uv_timer_t t;
+    uv_timer_init(loop, &t);
+    uv_timer_start(&t, [](uv_timer_t*){
+        auto [w, h] = Capturer::getResolution();
+        if (w != width || h != height) {
+                LOG_INFO_STREAM << "Screen Resolution changed to " << w << " x " << h;
+            width = w;
+            height = h;
+        }
+    }, 0, 3000);
 
     mtx.lock();
     HttpServer server(loop);

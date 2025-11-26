@@ -67,16 +67,23 @@ int parse_args(Args& args, int argc, char* argv[]) {
     return 0;
 }
 
-std::string getTime(time_t t) {
+std::string timeFmt(time_t t, const std::string& fmt) {
     auto tm = *std::localtime(&t);
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    oss << std::put_time(&tm, fmt.c_str());
     return oss.str();
 }
 
 std::string getTime() {
     auto t = std::time(nullptr);
-    return getTime(t);
+    return timeFmt(t);
+}
+
+std::string gmTimeFmt(time_t t, const std::string& fmt) {
+    auto tm = *std::gmtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, fmt.c_str());
+    return oss.str();
 }
 
 std::vector<std::pair<std::string,std::string>> getIpAddress() {
@@ -212,6 +219,47 @@ std::string speedString(size_t bps) {
         ss << bps << " B/s";
     }
     return ss.str();
+}
+
+std::pair<std::string,std::string> bisect(const std::string& s, char c) {
+    size_t i = s.find(c);
+    if (i == std::string::npos) {
+        return {s, ""};
+    }
+    return {s.substr(0, i), s.substr(i+1)};
+}
+
+// {<idx,len>, ...}
+std::vector<std::pair<size_t,size_t>> split(const std::string& s, char c, size_t n) {
+    std::vector<std::pair<size_t,size_t>> res;
+    size_t k = 0;
+    size_t i = 0;
+    while (i < s.size()) {
+        size_t j = i;
+        while (j < s.size() && s[j] != c) j++;
+        res.emplace_back(i, j-i);
+        i = j + 1;
+        if ((n > 0 && ++k >= n) || (i == s.size() && s[j] == c)) {
+            res.emplace_back(i, s.size()-i);
+            break;
+        }
+    }
+
+    return res;
+}
+
+std::string trim(const std::string& str) {
+    auto front = std::find_if_not(str.begin(), str.end(), 
+        [](unsigned char ch) { return std::isspace(ch); });
+    
+    auto back = std::find_if_not(str.rbegin(), str.rend(), 
+        [](unsigned char ch) { return std::isspace(ch); }).base();
+    
+    if (front >= back) {
+        return "";
+    }
+    
+    return std::string(front, back);
 }
 
 } // namespace

@@ -18,6 +18,8 @@ class WsJpgPlayer {
     this.speed = 0;
     this.alpha = 0.6;
     this.notify;
+    this.onStop = null;
+    this.onStart = null;
 
     this.setupCanvas();
     this.setupCursor();
@@ -44,21 +46,35 @@ class WsJpgPlayer {
     this.cursorSize = 20;
   }
 
+  stopPlaying() {
+    this.isPlaying = false;
+    if (this.onStop) this.onStop();
+  }
+
   smooth(oldVal, newVal) {
     if (!this.isPlaying) return 0;
     return this.alpha * newVal + (1-this.alpha) * oldVal;
   }
 
   destroy() {
-    this.isPlaying = false;
+    this.stopPlaying();
     this.ws.close(1000, 'close'); 
   }
 
   setupWs() {
     this.ws = new WebSocket(this.url);
+
+    this.timer = setTimeout(()=>{
+      if (!this.isPlaying) {
+        this.notify();
+      }
+    }, 5000);
+
     this.ws.onopen = () => {
+      clearTimeout(this.timer);
       this.isPlaying = true;
-      console.log('WebSocket Connected', this.url);
+      if (this.onStart) this.onStart();
+      // console.log('WebSocket Connected', this.url);
       this.nextFrame(this.full);
     };
 
@@ -71,9 +87,11 @@ class WsJpgPlayer {
           // console.log(obj);
           this.rx = obj.x / obj.w;
           this.ry = obj.y / obj.h;
+          this.connections = obj.connections;
           this.clients = obj.clients;
         } catch (err) {
           console.log(err);
+          console.log(event.data);
         }
       } else if (event.data instanceof Blob) {
         // 二进制数据（Blob 类型）
@@ -171,7 +189,7 @@ class WsJpgPlayer {
 
   stop() {
     this.drawPause();
-    this.isPlaying = false;
+    this.stopPlaying();
     this.delay = 0;
   }
 
@@ -249,6 +267,7 @@ class WsJpgPlayer {
   }
 
   drawPause() {
+    return;
     const width = this.canvas.width / this.pixelRatio;
     const height = this.canvas.height / this.pixelRatio;
 
@@ -275,15 +294,50 @@ class WsJpgPlayer {
   }
 }
 
+function initFullScreen() {
+  const body = document.body;
+  const toggleBtn = document.getElementById('toggleBtn');
+  function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        if (body.requestFullscreen) {
+          body.requestFullscreen().catch(err => {
+              alert(`fullscreen failed: ${err.message}`);
+          });
+        } else {
+          console.warn("requestFullscreen method not found!");
+        }
+      } else {
+          if (document.exitFullscreen) {
+              document.exitFullscreen();
+          }
+      }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+          toggleBtn.textContent = '🅧';
+      } else {
+          toggleBtn.textContent = '▣';
+      }
+  });
+
+  toggleBtn.addEventListener('click', toggleFullscreen);
+}
+
 (function init() {
+  initFullScreen();
 
   const alertBox = document.getElementById('alertBox');
   const alertText = document.getElementById('alertText');
   const closeBtn = document.getElementById('closeBtn');
   const pauseBtn = document.getElementById('pauseBtn');
   const canvas = document.getElementById('video');
-  let host = window.location.host || "localhost:2333";
-  const player = new WsJpgPlayer(canvas, 'ws://' + host + '/stream');
+
+  let url = '/stream';
+  if (! window.location.host) {
+    url = "ws://localhost:2333/stream";
+  }
+  const player = new WsJpgPlayer(canvas, url);
 
   const hideAlert = () => { alertBox.style.display = 'none'; };
 
@@ -307,9 +361,7 @@ class WsJpgPlayer {
     }
   };
 
-
   window.addEventListener('beforeunload', function() {
-    // player.ws.close(1000, 'page unload');
     player.pause();
   });
 
@@ -327,23 +379,53 @@ class WsJpgPlayer {
     }
   });
 
-  player.play();
+  const play_container = document.getElementById('play-container')
+  play_container.addEventListener("click", function(){
+    player.play();
+  });
+
+  player.onStart = ()=>{
+      pauseBtn.classList.add('pause');
+      pauseBtn.classList.remove('play');
+      play_container.classList.add('hidden');
+  };
+
+  player.onStop = ()=>{
+      pauseBtn.classList.add('play');
+      pauseBtn.classList.remove('pause');
+      play_container.classList.remove('hidden');
+      player.clients = [];
+  };
+
+  let update_details = ()=>{
+    if (player.clients) {
+      let s = '<ul>';
+      for (const item of player.clients) {
+        s += `<li>${item}</li>`;
+      }
+      s += '</ul>';
+      details.innerHTML = s;
+    }
+  };
+
+  const details = document.getElementById('details');
+  details.addEventListener('mouseleave', ()=>{
+    details.classList.add('hidden');
+  });
 
   const info_fps = document.getElementById('fps');
   const info_delay = document.getElementById('delay');
   const info_speed = document.getElementById('speed');
   const info_state = document.getElementById('state');
   const info_clients = document.getElementById('clients');
+  info_clients.addEventListener('mouseenter', ()=>{
+    update_details();
+    details.classList.remove('hidden');
+  });
+
+  let clients = 0;
 
   setInterval(() => {
-    if (player.isPlaying) {
-      pauseBtn.classList.add('pause');
-      pauseBtn.classList.remove('play');
-    } else {
-      pauseBtn.classList.add('play');
-      pauseBtn.classList.remove('pause');
-    }
-
     let fps = player.getFPS();
     fps = player.isPlaying ? fps.toFixed(2) : '0';
     info_fps.textContent = `${fps} fps`;
@@ -357,9 +439,14 @@ class WsJpgPlayer {
     const state = player.isPlaying? '▶︎' : '🆇';
     info_state.textContent = `${state}`;
 
-    const clients = player.isPlaying ? player.clients : '?';
+    if (clients != player.connections) {
+      update_details();
+    }
+    clients = player.isPlaying ? player.connections : '?';
     info_clients.textContent = `${clients}`;
 
   }, 1000);
+
+  player.play();
 
 })();

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- App 基本信息 -->
+  <key>CFBundleName</key>
+  <string>@MACOSX_BUNDLE_BUNDLE_NAME@</string>  <!-- App 名称（显示在 Dock 和启动台） -->
+  
+  <key>CFBundleDisplayName</key>
+  <string>@MACOSX_BUNDLE_DISPLAY_NAME@</string>  <!-- 显示名称（可选，长名称） -->
+  
+  <key>CFBundleIdentifier</key>
+  <string>@MACOSX_BUNDLE_GUI_IDENTIFIER@</string>  <!-- 从 CMake 传递的唯一标识 -->
+  
+  <key>CFBundleVersion</key>
+  <string>@MACOSX_BUNDLE_BUNDLE_VERSION@</string>  <!-- 版本号（从 CMake 传递） -->
+  
+  <key>CFBundleShortVersionString</key>
+  <string>@MACOSX_BUNDLE_SHORT_VERSION_STRING@</string>  <!-- 短版本号（从 CMake 传递） -->
+  
+  <!-- 图标配置（关键：指定 .icns 文件名，与 CMake 中的 MACOSX_BUNDLE_ICON_FILE 一致） -->
+  <key>CFBundleIconFile</key>
+  <string>@MACOSX_BUNDLE_ICON_FILE@</string>
+  
+  <!-- 其他必要配置 -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>  <!-- App 分类（可选） -->
+  
+  <key>NSHighResolutionCapable</key>
+  <true/>  <!-- 支持高分屏（Retina） -->
+</dict>
+</plist>

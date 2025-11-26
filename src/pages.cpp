@@ -85,10 +85,23 @@ public:
         std::stringstream ss;
         ss << "<ul>";
         for (const auto& [key, t] : reqs) {
-            ss << "<li>" <<  key << "&emsp;" << utils::getTime(t) << "</li>";
+            ss << "<li>" <<  key << "&emsp;" << utils::timeFmt(t) << "</li>";
         }
         ss << "</ul>";
         ss << "<p>FPS: " << 1000.0/avg_interval << "</p>";
+        return ss.str();
+    }
+
+    std::string getClientsList() {
+        std::stringstream ss;
+        ss << "[";
+        bool first = true;
+        for (const auto& [key, t] : reqs) {
+            if (!first) ss << ",";
+            ss << '"' << key << '"';
+            first = false;
+        }
+        ss << "]";
         return ss.str();
     }
 
@@ -96,6 +109,9 @@ public:
         reqs.clear();
         captime.clear();
         g_config.clients = 0;
+    }
+    std::unordered_map<std::string, time_t> getReqs() {
+        return reqs;
     }
 
 private:
@@ -202,6 +218,10 @@ static CapturerManager s_cap;
 
 static TimeoutTimerQueue s_timeoutQueue;
 
+std::unordered_map<std::string, time_t> getReqs() {
+    return s_cap.getReqs();
+}
+
 static void initStreamRoutes(HttpServer& server) {
     Response mjpegResp([](std::ostream& body, Response* self) {
         int d = s_cap.timeToNextFrame(self->getClientId());
@@ -258,11 +278,13 @@ static void initStreamRoutes(HttpServer& server) {
                     auto [x, y] = Capturer::getCursorPos();
                     std::stringstream ss;
                     ss << "{"
+                        << "\"type\":" << "\"cursor\","
                         << "\"x\":" << x << ","
                         << "\"y\":" << y << ","
                         << "\"w\":" << w << ","
                         << "\"h\":" << h << ","
-                        << "\"clients\":" << g_config.clients
+                        << "\"connections\":" << g_config.clients << ","
+                        << "\"clients\":" << s_cap.getClientsList()
                         << "}";
                     os << WsClient::pack_text_frame(ss.str());
 
@@ -313,13 +335,13 @@ void init(uv_loop_t* loop, HttpServer& server) {
 
 
     server.addRoute("GET", "/", Response(getIndexHtml()));
-
-    server.addRoute("GET", "/wsjpeg.min.js", Response(getWsJpegJs()));
-
     server.addRoute("GET", "/favicon.ico", Response(getFavicon()));
+
+    server.addRoute("GET", "/player.css", Response(getPlayerCss()));
+    server.addRoute("GET", "/player.js", Response(getPlayerJs()));
     
     server.addRoute("GET", "/video", Response(getMjpegIndexHtml()));
-    server.addRoute("GET", "/mjpeg.min.js", Response(getMjpegJs()));
+    server.addRoute("GET", "/mjpeg.js", Response(getMjpegJs()));
 
     server.addRoute("GET", "/raw", Response(getRawIndex()));
 

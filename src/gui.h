@@ -17,6 +17,8 @@
 #include <FL/Fl_Text_Buffer.H>
 #include <FL/Fl_Box.H>
 
+class AboutDialog;
+
 class GUI {
 
 public:
@@ -30,11 +32,16 @@ public:
     void activate();
     void setInfo(const std::string& label);
     bool updateArgs();
+    void onMessage(const char* msg);
 
 private:
     static void onTimeout(void* data);
+    static void onAbout(Fl_Widget* w, void* data);
+    static void onDetail(Fl_Widget* w, void* data);
 
 private:
+    int width;
+    int height;
     std::function<void()> callback;
     std::unique_ptr<Fl_Window> window;
     std::unique_ptr<Fl_Input> input_port;
@@ -46,6 +53,9 @@ private:
     std::unique_ptr<Fl_Output> info;
     std::unique_ptr<Fl_Text_Buffer> text_buf;
     std::unique_ptr<Fl_Text_Display> display;
+    std::unique_ptr<Fl_Button> button_detail;
+    std::unique_ptr<Fl_Button> button_about;
+    std::unique_ptr<Fl_Box> about;
 };
 
 

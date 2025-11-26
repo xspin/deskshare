@@ -4,16 +4,22 @@
 #include <string>
 #include "../utils.h"
 #include "include/index.html.h"
-#include "include/wsjpeg.min.js.h"
+#include "include/player.js.h"
+#include "include/player.css.h"
 #include "include/favicon.ico.h"
 #include "include/mjpeg.index.html.h"
-#include "include/mjpeg.min.js.h"
+#include "include/mjpeg.js.h"
 
 #define TO_STRING(v) \
     std::string(reinterpret_cast<char*>(v), v##_len)
 
-std::string getWsJpegJs() {
-    return TO_STRING(wsjpeg_min_js);
+
+std::string getPlayerJs() {
+    return TO_STRING(output_player_js);
+}
+
+std::string getPlayerCss() {
+    return TO_STRING(output_player_css);
 }
 
 std::string getIndexHtml() {
@@ -27,7 +33,7 @@ std::string getMjpegIndexHtml() {
 }
 
 std::string getMjpegJs() {
-    return TO_STRING(mjpeg_min_js);
+    return TO_STRING(output_mjpeg_js);
 }
 
 std::string getFavicon() {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8"/>
     <title>DeskShare {{version}}</title>
-    <script src="mjpeg.min.js"></script>
+    <script src="mjpeg.js"></script>
     <style>
       .transparent-btn {
         background-color: gray;
@@ -63,7 +63,6 @@
       if (frames === 0) {
         delay = 0;
         btn.textContent = "Play ▶︎";
-        running = false;
       }
       document.getElementById("delay").textContent = `${delay} ms`;
       frames = 0;

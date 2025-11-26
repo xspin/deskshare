@@ -1,29 +1,38 @@
 #!/bin/bash
 
-set -x
 # npm install terser -g
+# npm install -g csso-cli
 
-terser wsjpeg.js -o wsjpeg.min.js -m -c
-terser mjpeg.js -o mjpeg.min.js -m -c
-# cp mjpeg.js mjpeg.min.js
+set -x
 
-OUTPUT=include
+OUTPUT=output
 
-[ -e "$OUTPUT" ] || mkdir $OUTPUT
+rm -rvf include ${OUTPUT}
 
-tohex() {
+mkdir include
+mkdir ${OUTPUT}
+
+to_hex_header() {
     local path=$1
     if [ ! -f "$path" ]; then
         echo "file not found: $path"
         exit 1
     fi
-    xxd -c 16 -i "$path" "$OUTPUT/$path.h"
+    local fname=$(basename "$path")
+    xxd -c 16 -i "$path" "include/$fname.h"
 } 
 
-tohex favicon.ico
 
-tohex index.html
-tohex wsjpeg.min.js
+to_hex_header favicon.ico
+to_hex_header index.html
 
-tohex mjpeg.index.html
-tohex mjpeg.min.js
+terser player.js -o ${OUTPUT}/player.js -m -c
+to_hex_header ${OUTPUT}/player.js
+
+csso player.css -o ${OUTPUT}/player.css
+to_hex_header ${OUTPUT}/player.css
+
+to_hex_header mjpeg.index.html
+
+terser mjpeg.js -o ${OUTPUT}/mjpeg.js -m -c
+to_hex_header ${OUTPUT}/mjpeg.js

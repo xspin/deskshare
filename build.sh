@@ -19,7 +19,8 @@ hasArg() {
 hasArg clean
 if [ $? -eq 0 ]; then
     echo "Clean ..."
-    cmake --build build --target clean
+    # cmake --build build --target clean
+    rm -vrf build/*
     exit $? 
 fi
 
@@ -31,6 +32,7 @@ if [ $? -eq 0 ]; then
     BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_GUI=OFF"
 else
     BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_GUI=ON"
+    TARGET=${TARGET}.app/Contents/MacOS/deskshare
 fi
 
 hasArg debug
@@ -47,6 +49,13 @@ else
     BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_ASAN=OFF"
 fi
 
+hasArg test
+if [ $? -eq 0 ]; then
+    BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_TEST=ON"
+else
+    BUILD_FLAGS="${BUILD_FLAGS} -DENABLE_TEST=OFF"
+fi
+
 echo "Build flags: ${BUILD_FLAGS}"
 
 cmake . -B build ${BUILD_FLAGS} \
@@ -56,6 +65,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+hasArg test
+if [ $? -eq 0 ]; then
+    ctest --test-dir build/test -V
+fi
 
 hasArg lldb
 if [ $? -eq 0 ]; then
@@ -69,5 +82,3 @@ if [ $? -eq 0 ]; then
     exec ${TARGET}
     exit $?
 fi
-
-sh ./app.sh

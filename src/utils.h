@@ -40,8 +40,9 @@ namespace utils {
 
 int parse_args(Args& args, int argc, char* argv[]);
 
+std::string timeFmt(time_t t, const std::string& fmt="%Y-%m-%d %H:%M:%S");
+std::string gmTimeFmt(time_t t, const std::string& fmt);
 std::string getTime();
-std::string getTime(time_t t);
 
 std::vector<std::pair<std::string,std::string>> getIpAddress();
 
@@ -50,6 +51,13 @@ std::string renderTemplate(const std::string& tpl, std::unordered_map<std::strin
 std::string getMimeType(const std::string& filename); 
 
 std::string speedString(size_t bytes);
+
+std::vector<std::pair<size_t,size_t>> split(const std::string& s, char c, size_t n=0);
+
+std::pair<std::string,std::string> bisect(const std::string& s, char c);
+
+std::string trim(const std::string& s);
+
 
 template <typename T>
 struct is_string_like : std::false_type {};

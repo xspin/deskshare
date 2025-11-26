@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
         LOG_ERROR_STREAM << "Failed to start server on port " << port;
     }
 
-    std::string dash(80, '=');
+    std::string dash(70, '=');
     std::cout << dash << std::endl;
     for (const auto& [eth, ip] : utils::getIpAddress()) {
         std::cout << ">> http://" << ip << ":" << port << std::endl;

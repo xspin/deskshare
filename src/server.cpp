@@ -699,7 +699,7 @@ void HttpServer::closeClient(size_t client_id) {
 // 关闭连接回调
 void HttpServer::on_close(uv_handle_t* handle) {
     client_context* ctx = static_cast<client_context*>(handle->data);
-    LOG_INFO_STREAM << "client " << ctx->tag << " " << ctx << " closed" << ", reqs " << ctx->reqs;
+    LOG_INFO_STREAM << "Client " << ctx->tag << " " << ctx << " closed" << ", reqs " << ctx->reqs;
     if (ctx->server->onClientClosed) {
         ctx->server->onClientClosed(ctx->addr.first, ctx->addr.second);
     }
@@ -859,22 +859,21 @@ bool HttpServer::parseHttpRequest(const std::string& data, http_request& req) {
         LOG_WARNING_STREAM << "invalid http request: " << line;
         return false;
     }
+
+    // 解析url参数
+    auto [url, params] = utils::bisect(req.url, '?');
+    req.url = url;
+    for (auto [idx, len] : utils::split(params, '&')) {
+        if (len > 0) {
+            auto [key, val] = utils::bisect(params.substr(idx, len), '=');
+            req.params[utils::trim(key)] = utils::trim(val);
+        }
+    }
     
     // 解析头部
     while (std::getline(stream, line) && line != "\r" && !line.empty()) {
-        size_t colon_pos = line.find(':');
-        if (colon_pos != std::string::npos) {
-            std::string key = line.substr(0, colon_pos);
-            std::string value = line.substr(colon_pos + 1);
-            
-            // 去除首尾空白字符
-            key.erase(0, key.find_first_not_of(" \t"));
-            key.erase(key.find_last_not_of(" \t") + 1);
-            value.erase(0, value.find_first_not_of(" \t"));
-            value.erase(value.find_last_not_of(" \t\r") + 1);
-            
-            req.headers[key] = value;
-        }
+        auto [key, value] = utils::bisect(line, ':');
+        req.headers[utils::trim(key)] = utils::trim(value);
     }
     
     return true;

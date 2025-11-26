@@ -12,10 +12,14 @@ message("System Name: ${CMAKE_SYSTEM_NAME}")
 message("System Version: ${CMAKE_SYSTEM_VERSION}")
 message("System Processor: ${CMAKE_SYSTEM_PROCESSOR}")
 
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER}")
+message(STATUS "Compiler ID: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "COmpiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
 option(ENABLE_ASAN "Enable Address Sanitizer for memory leak detection" OFF)
 option(ENABLE_DEBUG "Enable Debug compile" OFF)
 option(ENABLE_GUI "Enable GUI build" ON)
+option(ENABLE_TEST "Enable unit test" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -67,14 +71,14 @@ find_library(LIBFLTK
     NAMES libfltk.a libfltk.lib
     PATHS ${FLTK_LIB_DIR}
 )
-    message("Find libfltk: ${LIBFLTK}")
+    message(STATUS "Find libfltk: ${LIBFLTK}")
     if (NOT LIBFLTK)
         message(FATAL_ERROR "FLTK lib not found!")
     endif()
 endif()
 
-message("Find libuv: ${LIBUV}")
-message("Find libcrypto: ${LIBCRYPTO}")
+message(STATUS "Find libuv: ${LIBUV}")
+message(STATUS "Find libcrypto: ${LIBCRYPTO}")
 
 if (NOT ( LIBUV AND LIBCRYPTO ) )
     message(FATAL_ERROR "required lib not found!")
@@ -123,34 +127,68 @@ else()
     )
 endif()
 
-add_executable(deskshare ${SRC})
+if (DARWIN AND ENABLE_GUI)
+    set(APP_ICON ${CMAKE_SOURCE_DIR}/src/assets/favicon.ico)
 
-if (WIN32 AND ENABLE_GUI)
-    target_link_options(deskshare PRIVATE -static
-        "-mwindows"
+    set_source_files_properties(${APP_ICON} PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
     )
+
+    configure_file(
+        ${CMAKE_SOURCE_DIR}/Info.plist.in  # 输入：模板文件
+        ${CMAKE_BINARY_DIR}/Info.plist     # 输出：最终文件（放入 App 包）
+        @ONLY  # 仅替换 @变量@ 格式的占位符
+    )
+
+    add_executable(deskshare MACOSX_BUNDLE 
+        ${SRC}
+        ${CMAKE_BINARY_DIR}/Info.plist
+        ${APP_ICON}
+    )
+
+    set_target_properties(deskshare PROPERTIES
+        MACOSX_BUNDLE_BUNDLE_NAME DeskShare
+        MACOSX_BUNDLE_DISPLAY_NAME "DeskShare"
+        # 指定 App 包的图标（必须与 Info.plist 中的图标名称一致）
+        MACOSX_BUNDLE_ICON_FILE favicon.ico
+        # 指定图标文件在 App 包中的路径（固定为 Resources）
+        MACOSX_BUNDLE_RESOURCES ${APP_ICON}
+        # 可选：设置 App 版本、签名等
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.example.deskshare"  # 唯一标识（反向域名格式）
+        # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist" 
+    )
+
+else()
+    add_executable(deskshare ${SRC})
+
 endif()
 
-target_link_libraries(deskshare PRIVATE
+set(LIBS
     ${LIBUV}
     ${LIBCRYPTO}
 )
+
 if (ENABLE_GUI)
-    target_link_libraries(deskshare PRIVATE
-        ${LIBFLTK}
-    )
+    list(APPEND LIBS ${LIBFLTK})
 endif()
 
 if (DARWIN)
-    target_link_libraries(deskshare PRIVATE
+    list(APPEND LIBS
         "-framework CoreGraphics"
         "-framework CoreFoundation"
         "-framework ImageIO"
         "-framework CoreServices"
         "-framework Cocoa"
     )
+
 elseif (WIN32)
-    target_link_libraries(deskshare PRIVATE
+    if (ENABLE_GUI)
+        list(APPEND LIBS "-mwindows")
+    endif()
+
+    list(APPEND LIBS
         ws2_32
         userenv
         dbghelp
@@ -162,6 +200,8 @@ elseif (WIN32)
         gdiplus
     )
 endif()
+
+target_link_libraries(deskshare PRIVATE ${LIBS})
 
 
 if(WIN32 AND ENABLE_GUI)
@@ -187,4 +227,21 @@ if(WIN32 AND ENABLE_GUI)
         target_sources(deskshare PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon.rc)
     endif()
     target_sources(deskshare PRIVATE version.rc)
+endif()
+
+
+
+if (ENABLE_TEST)
+    add_library(unittest STATIC
+        src/capture/capturer.h
+        src/capture/capturer.cpp
+        src/utils.h
+        src/utils.cpp
+    )
+
+    target_link_libraries(unittest PRIVATE
+        ${LIBS}
+    )
+
+    add_subdirectory(test)
 endif()

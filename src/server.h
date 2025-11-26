@@ -39,6 +39,7 @@ struct http_request {
     std::string url;
     std::string version;
     std::unordered_map<std::string, std::string> headers;
+    std::unordered_map<std::string, std::string> params;
     std::string body;
 };
 

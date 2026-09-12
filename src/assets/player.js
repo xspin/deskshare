@@ -7,6 +7,7 @@ class WsJpgPlayer {
       alpha: false,
     });
     this.url = url;
+    // console.log('url:', url);
     this.isPlaying = false;
 
     this.frameCount = 0;
@@ -333,9 +334,11 @@ function initFullScreen() {
   const pauseBtn = document.getElementById('pauseBtn');
   const canvas = document.getElementById('video');
 
-  let url = '/stream';
+  let url;
   if (! window.location.host) {
     url = "ws://localhost:2333/stream";
+  } else {
+    url = 'ws://' + window.location.host + '/stream'
   }
   const player = new WsJpgPlayer(canvas, url);
 

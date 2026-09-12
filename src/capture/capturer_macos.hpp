@@ -14,6 +14,7 @@ static CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
     return image;
 }
 
+/*
 // 截取指定显示器的矩形区域
 static CGImageRef captureScreenRect(CGDirectDisplayID displayID, CGRect rect) {
     // 仅捕获指定区域，减少数据量（比全屏更高效）
@@ -23,6 +24,7 @@ static CGImageRef captureScreenRect(CGDirectDisplayID displayID, CGRect rect) {
     }
     return image;
 }
+*/
 
 static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float quality) {
     std::vector<unsigned char> jpegData;
@@ -76,7 +78,25 @@ static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float qual
     return jpegData;
 }
 
+static void listDisplays() {
+    static bool listed = false;
+    if (listed) return;
+
+    listed = true;
+    std::cout << "Main Display ID: " << CGMainDisplayID() << std::endl;
+    std::cout << "Direct Main: " << kCGDirectMainDisplay << std::endl;
+    CGDirectDisplayID displays[32];
+    uint32_t count = 0;
+    CGGetActiveDisplayList(32, displays, &count);
+
+    // displays[0] 是主显示器，displays[1..count-1] 是其他显示器
+    for (uint32_t i = 0; i < count; i++) {
+        printf("Display %u: %u\n", i, displays[i]);
+    }
+}
+
 std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float quality) {
+    // todo select display id
     CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
     if (!imgRef) {
         // std::cerr << "Failed to capture screen" << std::endl;
@@ -84,6 +104,7 @@ std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float qu
         height = 0;
         return {};
     }
+    listDisplays();
 
     width = CGImageGetWidth(imgRef);
     height = CGImageGetHeight(imgRef);

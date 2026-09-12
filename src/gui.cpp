@@ -234,7 +234,7 @@ void GUI::init(std::function<void()> callback) {
 
     int btn_detail_x = info_x + info_w + 5;
     int btn_detail_y = info_y;
-    button_detail  = std::make_unique<Fl_Button>(btn_detail_x, btn_detail_y, 25, h, "…");
+    button_detail  = std::make_unique<Fl_Button>(btn_detail_x, btn_detail_y, 25, h, "☰");
     button_detail->color(DEFAULT_BG_COLOR);
     button_detail->labelfont(FL_BOLD);
     // button_detail->box(FL_FLAT_BOX);

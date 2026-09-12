@@ -24,8 +24,36 @@ if [ $? -eq 0 ]; then
     exit $? 
 fi
 
+hasArg dmg
+if [ $? -eq 0 ]; then
+    mkdir -p /tmp/dmg-src
+    cp -R build/bin/deskshare.app /tmp/dmg-src/
+    ln -s /Applications /tmp/dmg-src/Applications
+    hdiutil create -volname "deskshare" \
+        -srcfolder /tmp/dmg-src \
+        -ov -format UDZO \
+        ./build/deskshare-macos-x86_64.dmg
+    exit $?
+fi
+
+hasArg zip
+if [ $? -eq 0 ]; then
+    zipfile=build/deskshare-windows-x86_64.zip
+    rm -f $zipfile
+    zip -j $zipfile build/bin/deskshare.exe
+    exit $?
+fi
+
+
 BUILD_FLAGS=
 TARGET=./build/bin/deskshare
+
+hasArg assets
+if [ $? -eq 0 ]; then
+    pushd src/assets
+        bash process.sh
+    popd
+fi
 
 hasArg nogui
 if [ $? -eq 0 ]; then

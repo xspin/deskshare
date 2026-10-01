@@ -1,14 +1,14 @@
+#include "capture/capturer.h"
+#include "gui.h"
+#include "logger.h"
+#include "pages.h"
+#include "server.h"
+#include "utils.h"
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <thread>
-#include <atomic> 
-#include <chrono>
-#include "server.h"
-#include "logger.h"
-#include "pages.h"
-#include "utils.h"
-#include "gui.h"
-#include "capture/capturer.h"
 
 std::atomic<bool> terminal(false);
 std::atomic<bool> running(false);
@@ -17,11 +17,11 @@ uv_async_t async_stop;
 
 GUI gui;
 
-static void async_stop_cb(uv_async_t* handle) {
+static void async_stop_cb(uv_async_t *handle) {
     LOG_INFO_STREAM << "Async stop signal received";
-    HttpServer* server = static_cast<HttpServer*>(handle->data);
+    HttpServer *server = static_cast<HttpServer *>(handle->data);
     pages::stop();
-    server->stop([](uv_handle_t* handle){
+    server->stop([](uv_handle_t *handle) {
         std::this_thread::sleep_for(std::chrono::seconds(3));
         uv_stop(handle->loop);
         LOG_INFO_STREAM << "HTTP Server stoped";
@@ -38,30 +38,33 @@ static void stopWorker() {
 
 void worker() {
     // uv_loop_t* loop = uv_default_loop();
-    uv_loop_t* loop = uv_loop_new();
+    uv_loop_t *loop = uv_loop_new();
     if (!loop) {
         LOG_ERROR_STREAM << "Failed to create uv loop";
         return;
     }
     uv_async_init(loop, &async_stop, async_stop_cb);
 
-    LOG_INFO_STREAM << "DeskShare " APP_VERSION " Start";
+    LOG_INFO_STREAM << "DeskShare " APP_VERSION;
 
     auto [w, h] = Capturer::getResolution();
-    static int width = w;
-    static int height = h;
+    static size_t width = w;
+    static size_t height = h;
 
     LOG_INFO_STREAM << "Screen Resolution: " << width << " x " << height;
     uv_timer_t t;
     uv_timer_init(loop, &t);
-    uv_timer_start(&t, [](uv_timer_t*){
-        auto [w, h] = Capturer::getResolution();
-        if (w != width || h != height) {
+    uv_timer_start(
+        &t,
+        [](uv_timer_t *) {
+            auto [w, h] = Capturer::getResolution();
+            if (w != width || h != height) {
                 LOG_INFO_STREAM << "Screen Resolution changed to " << w << " x " << h;
-            width = w;
-            height = h;
-        }
-    }, 0, 3000);
+                width = w;
+                height = h;
+            }
+        },
+        0, 3000);
 
     mtx.lock();
     HttpServer server(loop);
@@ -76,13 +79,13 @@ void worker() {
 
         mtx.lock(); // waiting for start
 
-        if (terminal) break;
+        if (terminal)
+            break;
 
         LOG_INFO_STREAM << g_config.str();
-        server.setTimeout(g_config.timeout, [](uv_timer_t* handle, HttpServer* self){
-            uv_async_send(&async_stop);
-        });
- 
+        server.setTimeout(g_config.timeout,
+                          [](uv_timer_t *handle, HttpServer *self) { uv_async_send(&async_stop); });
+
         gui.deactivate();
         Fl::awake();
 
@@ -94,7 +97,7 @@ void worker() {
         running = true;
 
         std::stringstream addrs;
-        for (const auto& [eth, ip] : utils::getIpAddress()) {
+        for (const auto &[eth, ip] : utils::getIpAddress()) {
             LOG_INFO_STREAM << ">> http://" << ip << ":" << g_config.port;
             addrs << " http://" << ip << ":" << g_config.port << " ";
         }
@@ -106,11 +109,11 @@ void worker() {
         running = false;
     }
 
-    uv_close((uv_handle_t*)&async_stop, nullptr);
+    uv_close((uv_handle_t *)&async_stop, nullptr);
     uv_loop_close(loop);
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (utils::parse_args(g_config, argc, argv)) {
         return -1;
     }
@@ -129,7 +132,7 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    Logger& log = getLogger();
+    Logger &log = getLogger();
     log.setColor(false);
     log.setMask(LOG_STIME);
     if (g_config.debug) {
@@ -153,6 +156,6 @@ int main(int argc, char* argv[]) {
     LOG_INFO_STREAM << "GUI Stoped";
 
     t.join();
-    
+
     return 0;
 }

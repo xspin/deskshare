@@ -1,5 +1,4 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -109,4 +108,3 @@ static inline Logger& getLogger() {
 #define LOG_WARNING_STREAM      LOG_STREAM(LogLevel::WARNING)
 #define LOG_ERROR_STREAM        LOG_STREAM(LogLevel::ERR)
 
-#endif // LOGGER_H

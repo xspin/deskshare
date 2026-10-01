@@ -1,8 +1,10 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <iostream>
-#include <vector>
 #include <string>
+#include <vector>
+
+namespace impl {
 
 // 截取指定显示器的全屏图像
 static CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
@@ -26,35 +28,58 @@ static CGImageRef captureScreenRect(CGDirectDisplayID displayID, CGRect rect) {
 }
 */
 
-static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float quality) {
-    std::vector<unsigned char> jpegData;
-    if (!image) return jpegData;
+static bool CGImageToRGBAData(std::vector<unsigned char> &rgba, CGImageRef image, size_t width,
+                              size_t height) {
+    // 假设 image 是一个 CGImageRef
+    // size_t width = CGImageGetWidth(image);
+    // size_t height = CGImageGetHeight(image);
+    size_t bytesPerRow = width * 4; // RGBA 每像素 4 字节
+
+    // 创建 RGBA 色彩空间
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+
+    // 分配缓冲区
+    rgba.resize(bytesPerRow * height);
+
+    // 创建位图上下文，强制指定为 RGBA 格式
+    CGContextRef ctx = CGBitmapContextCreate(rgba.data(), width, height,
+                                             8, // 每通道 8 位
+                                             bytesPerRow, colorSpace,
+                                             kCGImageAlphaPremultipliedLast // RGBA
+    );
+
+    // 把 CGImage 绘制进去，完成格式转换
+    CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), image);
+    CGContextRelease(ctx);
+    return true;
+}
+
+// 现在 pixelData 里就是明确的 RGBA 数据了
+// 可以送入 x264 或做色彩转换
+static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef image,
+                              float quality) {
+    if (!image)
+        return false;
 
     // 1. 创建内存数据容器（CFMutableDataRef）
     CFMutableDataRef data = CFDataCreateMutable(kCFAllocatorDefault, 0);
-    if (!data) return jpegData;
+    if (!data)
+        return false;
 
     // 2. 创建 JPEG 输出目标（写入内存数据）
     CFStringRef jpegType = kUTTypeJPEG;
     // CFStringRef jpegType = UTTypeJPEG;
-    CGImageDestinationRef destination = CGImageDestinationCreateWithData(
-        data,
-        jpegType,
-        1, // 单张图像
-        NULL
-    );
+    CGImageDestinationRef destination = CGImageDestinationCreateWithData(data, jpegType,
+                                                                         1, // 单张图像
+                                                                         NULL);
     if (!destination) {
         CFRelease(data);
-        return jpegData;
+        return false;
     }
 
     // 3. 设置压缩质量
     CFMutableDictionaryRef options = CFDictionaryCreateMutable(
-        kCFAllocatorDefault,
-        0,
-        &kCFTypeDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks
-    );
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFNumberRef qualityNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberFloatType, &quality);
     CFDictionarySetValue(options, kCGImageDestinationLossyCompressionQuality, qualityNum);
     CFRelease(qualityNum);
@@ -65,7 +90,7 @@ static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float qual
 
     // 5. 将 CFDataRef 转换为 vector（便于 C++ 处理）
     if (success) {
-        const unsigned char* bytes = CFDataGetBytePtr(data);
+        const unsigned char *bytes = CFDataGetBytePtr(data);
         CFIndex length = CFDataGetLength(data);
         jpegData.assign(bytes, bytes + length);
     }
@@ -75,12 +100,13 @@ static std::vector<unsigned char> CGImageToJPEGData(CGImageRef image, float qual
     CFRelease(destination);
     CFRelease(data);
 
-    return jpegData;
+    return true;
 }
 
 static void listDisplays() {
     static bool listed = false;
-    if (listed) return;
+    if (listed)
+        return;
 
     listed = true;
     std::cout << "Main Display ID: " << CGMainDisplayID() << std::endl;
@@ -95,41 +121,51 @@ static void listDisplays() {
     }
 }
 
-std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float quality) {
+bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality) {
     // todo select display id
     CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
     if (!imgRef) {
         // std::cerr << "Failed to capture screen" << std::endl;
         width = 0;
         height = 0;
-        return {};
+        return false;
     }
     listDisplays();
 
     width = CGImageGetWidth(imgRef);
     height = CGImageGetHeight(imgRef);
 
-    auto jpeg = CGImageToJPEGData(imgRef, quality);
+    bool ret = CGImageToJPEGData(jpeg, imgRef, quality);
     CGImageRelease(imgRef);
 
-    return jpeg;
+    return ret;
 }
 
-std::pair<int,int> getScreenResolution() {
-    static int width = 0;
-    static int height = 0;
+bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+    CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
+    if (!imgRef)
+        return false;
+    bool ret = CGImageToRGBAData(rgba, imgRef, width, height);
+    CGImageRelease(imgRef);
+    return ret;
+}
+
+std::pair<size_t, size_t> getScreenResolution() {
+    static size_t width = 0;
+    static size_t height = 0;
     if (width == 0) {
         CGDirectDisplayID main_display = CGMainDisplayID();
         CGRect bounds = CGDisplayBounds(main_display);
-        width = (int)CGRectGetWidth(bounds);
-        height = (int)CGRectGetHeight(bounds);
+        width = CGRectGetWidth(bounds);
+        height = CGRectGetHeight(bounds);
     }
     return {width, height};
 }
 
-std::pair<int,int> getCursorLoc() {
+std::pair<size_t, size_t> getCursorLoc() {
     CGEventRef event = CGEventCreate(nullptr);
     CGPoint pos = CGEventGetLocation(event);
     CFRelease(event);
     return {pos.x, pos.y};
 }
+} // namespace impl

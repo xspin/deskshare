@@ -1,6 +1,5 @@
-#include <gtest/gtest.h>
 #include "capture/capturer.h"
-
+#include <gtest/gtest.h>
 
 TEST(cpature, Capturer) {
     auto [w, h] = Capturer::getResolution();
@@ -10,8 +9,8 @@ TEST(cpature, Capturer) {
     auto [x, y] = Capturer::getCursorPos();
     EXPECT_LT(x, w);
     EXPECT_LT(y, h);
-    
-    Capturer cap;
+
+    Capturer &cap = Capturer::getInstance();
     cap.capture(0.01);
     EXPECT_GT(cap.jpg.size(), 0);
     EXPECT_GT(cap.width, 0);

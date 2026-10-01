@@ -1,26 +1,34 @@
-#include <cassert>
 #include "capturer.h"
+#include <cassert>
+#include <vector>
 
-#ifdef PLATFORM_MACOS
-#include "capturer_macos.hpp"
-#elif defined(PLATFORM_WINDOWS)
-#include "capturer_win.hpp"
+#if defined(__APPLE__) && defined(__MACH__)
+#include "capturer_macos.cpp"
+#elif defined(_WIN32)
+#include "capturer_win.cpp"
 #endif
 
-std::vector<unsigned char> captureScreen(size_t& width, size_t& height, float quality);
-std::pair<int,int> getCursorLoc();
-std::pair<int,int> getScreenResolution();
+namespace impl {
+bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height);
+bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality);
+std::pair<size_t, size_t> getCursorLoc();
+std::pair<size_t, size_t> getScreenResolution();
+} // namespace impl
 
 bool Capturer::capture(float quality) {
     assert(0 < quality && quality <= 1);
-    jpg = captureScreen(width, height, quality);
-    return !jpg.empty();
+    return impl::captureScreen(jpg, width, height, quality);
 }
 
-std::pair<int,int> Capturer::getCursorPos() {
-    return getCursorLoc();
+bool Capturer::captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+    return impl::captureRgba(rgba, width, height);
 }
 
-std::pair<int,int> Capturer::getResolution() {
-    return getScreenResolution();
+std::pair<size_t, size_t> Capturer::getCursorPos() {
+    return impl::getCursorLoc();
+}
+
+// @return {width, height}
+std::pair<size_t, size_t> Capturer::getResolution() {
+    return impl::getScreenResolution();
 }

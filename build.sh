@@ -21,18 +21,20 @@ if [ $? -eq 0 ]; then
     echo "Clean ..."
     # cmake --build build --target clean
     rm -vrf build/*
-    exit $? 
+    exit $?
 fi
 
 hasArg dmg
 if [ $? -eq 0 ]; then
+    rm -rf /tmp/dmg-src
     mkdir -p /tmp/dmg-src
     cp -R build/bin/deskshare.app /tmp/dmg-src/
     ln -s /Applications /tmp/dmg-src/Applications
+    arch=$(uname -m)
     hdiutil create -volname "deskshare" \
         -srcfolder /tmp/dmg-src \
         -ov -format UDZO \
-        ./build/deskshare-macos-x86_64.dmg
+        ./build/deskshare-macos-${arch}.dmg
     exit $?
 fi
 
@@ -44,14 +46,13 @@ if [ $? -eq 0 ]; then
     exit $?
 fi
 
-
 BUILD_FLAGS=
 TARGET=./build/bin/deskshare
 
 hasArg assets
 if [ $? -eq 0 ]; then
     pushd src/assets
-        bash process.sh
+    bash process.sh
     popd
 fi
 
@@ -86,8 +87,8 @@ fi
 
 echo "Build flags: ${BUILD_FLAGS}"
 
-cmake . -B build ${BUILD_FLAGS} \
-&& cmake --build build
+cmake . -B build ${BUILD_FLAGS} &&
+    cmake --build build
 if [ $? -ne 0 ]; then
     echo "\033[31m Build Failed! \033[0m"
     exit 1

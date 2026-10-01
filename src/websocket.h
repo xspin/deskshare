@@ -1,5 +1,4 @@
-#ifndef WEBSOCKET_H
-#define WEBSOCKET_H
+#pragma once
 
 #include <string>
 #include <functional>
@@ -103,4 +102,3 @@ public:
     static std::string pack_binary_frame(const char* data, size_t len);
 };
 
-#endif // WEBSOCKET_H

@@ -11,3 +11,4 @@ build/
 leaksrun.sh
 *.app
 src/assets/output
+.cache/

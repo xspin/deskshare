@@ -1,22 +1,25 @@
-#ifndef UTILS_H
-#define UTILS_H
+#pragma once
 
-#include <string>
-#include <vector>
+#include <cassert>
 #include <ctime>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
-#include <uv.h>
+#include <string>
 #include <unordered_map>
-#include <cassert>
+#include <uv.h>
+#include <vector>
+
+#ifndef APP_VERSION
+#define APP_VERSION "unkown"
+#endif
 
 struct Args {
     bool debug = false;
     int port = 2333;
     float quality = 0.6;
     int fps = 7;
-    int timeout = 3600; //seconds
+    int timeout = 3600; // seconds
     bool color = 0;
     size_t clients = 0;
     size_t frames = 0;
@@ -25,11 +28,11 @@ struct Args {
     std::string str() {
         std::stringstream ss;
         ss << "Options: { "
-            << "port: " << port << ", "
-            << "quality: " << quality << ", "
-            << "timeout: " << timeout << ", "
-            << "fps: " << fps << ", "
-            << "debug: " << debug << " }";
+           << "port: " << port << ", "
+           << "quality: " << quality << ", "
+           << "timeout: " << timeout << ", "
+           << "fps: " << fps << ", "
+           << "debug: " << debug << " }";
         return ss.str();
     }
 };
@@ -38,37 +41,34 @@ extern Args g_config;
 
 namespace utils {
 
-int parse_args(Args& args, int argc, char* argv[]);
+int parse_args(Args &args, int argc, char *argv[]);
 
-std::string timeFmt(time_t t, const std::string& fmt="%Y-%m-%d %H:%M:%S");
-std::string gmTimeFmt(time_t t, const std::string& fmt);
+std::string timeFmt(time_t t, const std::string &fmt = "%Y-%m-%d %H:%M:%S");
+std::string gmTimeFmt(time_t t, const std::string &fmt);
 std::string getTime();
 
-std::vector<std::pair<std::string,std::string>> getIpAddress();
+std::vector<std::pair<std::string, std::string>> getIpAddress();
 
-std::string renderTemplate(const std::string& tpl, std::unordered_map<std::string,std::string> mp);
+std::string renderTemplate(const std::string &tpl, std::unordered_map<std::string, std::string> mp);
 
-std::string getMimeType(const std::string& filename); 
+std::string getMimeType(const std::string &filename);
 
 std::string speedString(size_t bytes);
 
-std::vector<std::pair<size_t,size_t>> split(const std::string& s, char c, size_t n=0);
+std::vector<std::pair<size_t, size_t>> split(const std::string &s, char c, size_t n = 0);
 
-std::pair<std::string,std::string> bisect(const std::string& s, char c);
+std::pair<std::string, std::string> bisect(const std::string &s, char c);
 
-std::string trim(const std::string& s);
+std::string trim(const std::string &s);
 
-
-template <typename T>
-struct is_string_like : std::false_type {};
+template <typename T> struct is_string_like : std::false_type {};
 
 template <> struct is_string_like<std::string> : std::true_type {};
-template <> struct is_string_like<const char*> : std::true_type {};
-template <> struct is_string_like<char*> : std::true_type {};
+template <> struct is_string_like<const char *> : std::true_type {};
+template <> struct is_string_like<char *> : std::true_type {};
 template <size_t N> struct is_string_like<const char[N]> : std::true_type {};
 template <size_t N> struct is_string_like<char[N]> : std::true_type {};
 template <typename T> constexpr bool is_string_like_v = is_string_like<T>::value;
 
-} // namespace
+} // namespace utils
 
-#endif // UTILS_H

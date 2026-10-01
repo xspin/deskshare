@@ -1,7 +1,16 @@
-#include "logger.h"
-#include "utils.h"
 #include "gui.h"
+#include "capture/capturer.h"
+#include "logger.h"
 #include "pages.h"
+#include "utils.h"
+#include <FL/Fl_Tooltip.H>
+#include <functional>
+#include <iomanip>
+#include <memory>
+
+static const int preview_fps = 10;
+static volatile bool show_preview = false;
+static volatile bool show_details = false;
 
 static inline const std::string compilerInfo() {
     std::stringstream ss;
@@ -11,7 +20,7 @@ static inline const std::string compilerInfo() {
     ss << "Clang " << __clang_version__;
 #elif defined(__GNUC__)
     // GCC
-    ss << "GCC " << __GNUC__  << "." <<  __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__;
+    ss << "GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__;
 #endif
 
     return ss.str();
@@ -21,16 +30,17 @@ static const Fl_Color DEFAULT_BG_COLOR = fl_rgb_color(236, 236, 236);
 
 static const Fl_Color DEFAULT_FONT_COLOR = fl_rgb_color(67, 67, 67);
 
-
 GUI::GUI() {
+    Fl_Tooltip::delay(0.5);
+    Fl_Tooltip::hoverdelay(0);
 }
 
 GUI::~GUI() {
 }
 
-static void digitCheck(Fl_Widget* w, void* data) {
-    Fl_Input* input = (Fl_Input*)w;
-    const char* text = input->value();
+static void digitCheck(Fl_Widget *w, void *data) {
+    Fl_Input *input = (Fl_Input *)w;
+    const char *text = input->value();
 
     bool valid = true;
     for (int i = 0; text[i] != '\0'; ++i) {
@@ -43,9 +53,10 @@ static void digitCheck(Fl_Widget* w, void* data) {
     input->textcolor(valid ? FL_BLACK : FL_RED);
     input->redraw();
 
-    if (!valid) return;
+    if (!valid)
+        return;
 
-    if (data && std::string((const char*)data) == "FPS") {
+    if (data && std::string((const char *)data) == "FPS") {
         int t = std::stoi(text);
         if (0 < t && t <= 60) {
             g_config.fps = t;
@@ -61,8 +72,8 @@ static void digitCheck(Fl_Widget* w, void* data) {
 
 #define TIMEOUT_INTERVAL 3.0
 
-void GUI::onTimeout(void* data) {
-    GUI* self = static_cast<GUI*>(data);
+void GUI::onTimeout(void *data) {
+    GUI *self = static_cast<GUI *>(data);
     std::stringstream ss;
     ss << " " << g_config.clients << " ☺  ";
     ss << std::fixed << std::setprecision(1) << (g_config.frames / TIMEOUT_INTERVAL) << " fps  ";
@@ -75,60 +86,148 @@ void GUI::onTimeout(void* data) {
     Fl::repeat_timeout(TIMEOUT_INTERVAL, onTimeout, data);
 }
 
-void GUI::onMessage(const char* msg) {
-    static bool show = false;
-    if (show) {
-        this->about->hide();
+void GUI::onMessage(const char *msg) {
+    if (show_preview) {
+        show_preview = false;
+    }
+
+    if (show_details) {
+        show_details = false;
+        if (show_preview)
+            return;
+        this->preview->hide();
+        this->detail->hide();
         this->display->show();
-        show = false;
         return;
     }
 
-    this->about->label(msg);
+    show_details = true;
+    show_preview = false;
+    this->detail->label(msg);
+    this->preview->hide();
     this->display->hide();
-    this->about->show();
-    show = true;
+    this->detail->show();
 
-    Fl::add_timeout(10, [](void* data){
-        GUI* self = static_cast<GUI*>(data);
-        self->about->hide();
-        self->display->show();
-        show = false;
-    }, this);
-
+    Fl::add_timeout(
+        10,
+        [](void *data) {
+            if (!show_details)
+                return;
+            show_details = false;
+            if (show_preview)
+                return;
+            GUI *self = static_cast<GUI *>(data);
+            self->preview->hide();
+            self->detail->hide();
+            self->display->show();
+        },
+        this);
 }
 
-void GUI::onAbout(Fl_Widget* w, void* data) {
+void GUI::onAbout(Fl_Widget *w, void *data) {
+#define BUILD_TIME __DATE__ " " __TIME__
     static std::string about_info;
     if (about_info.empty()) {
         std::stringstream ss;
         ss << "\n\nDeskShare v" << APP_VERSION << "\n\n"
-            << "Compiler: " << compilerInfo() << "\n\n"
-            << "Build: " << __TIMESTAMP__ << "\n\n"
-            << "Email: xnipse@@gmail.com\n\n";
+           << "Compiler: " << compilerInfo() << "\n\n"
+           << "Build: " << BUILD_TIME << "\n\n"
+           << "Email: xnipse@@gmail.com\n\n";
         about_info = ss.str();
     }
-    GUI* self = static_cast<GUI*>(data);
-    self->about->align(FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    GUI *self = static_cast<GUI *>(data);
+    self->detail->align(FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     self->onMessage(about_info.c_str());
 }
 
-void GUI::onDetail(Fl_Widget* w, void* data) {
+void GUI::onDetail(Fl_Widget *w, void *data) {
     static std::string details;
-    GUI* self = static_cast<GUI*>(data);
+    GUI *self = static_cast<GUI *>(data);
     auto reqs = pages::getReqs();
 
     std::stringstream ss;
     ss << "\nRemote Clients:\n\n";
     auto now = std::time(nullptr);
-    for (const auto& [key, ts] : reqs) {
+    for (const auto &[key, ts] : reqs) {
         time_t d = now - ts;
-        ss << "[" << utils::timeFmt(ts) << "]    " << key
-           << "    (" << utils::gmTimeFmt(d, "%H:%M:%S") << ")\n";
+        ss << "[" << utils::timeFmt(ts) << "]    " << key << "    ("
+           << utils::gmTimeFmt(d, "%H:%M:%S") << ")\n";
     }
     details = ss.str();
-    self->about->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    self->detail->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     self->onMessage(details.c_str());
+}
+
+void GUI::previewImpl(void *data) {
+    static Fl_Timestamp start;
+    static int frames = 0;
+
+    if (frames == 0) {
+        start = Fl::now();
+    }
+    frames++;
+
+    GUI *self = static_cast<GUI *>(data);
+    if (!show_preview) {
+        if (!show_details) {
+            self->preview->hide();
+            self->detail->hide();
+            self->display->show();
+        }
+        double elapsed = Fl::seconds_since(start);
+        double fps = frames / elapsed;
+        LOG_INFO_STREAM << "Stop preview. " << std::fixed << std::setprecision(2) << fps << " fps";
+        frames = 0;
+        return;
+    }
+
+    Fl_Timestamp frame_start = Fl::now();
+    auto &cap = Capturer::getInstance();
+    auto [width, height] = self->img_size;
+    cap.captureRgba(self->pixel, width, height);
+
+    if (!self->preview->image() || !self->img || self->img->array != self->pixel.data()) {
+        self->img = std::make_unique<Fl_RGB_Image>(self->pixel.data(), width, height, 4);
+        self->img->alloc_array = 0;
+        self->preview->image(self->img.get());
+    } else {
+        self->img->uncache();
+        self->preview->redraw();
+    }
+
+    double elapsed = Fl::seconds_since(frame_start);
+
+    double wait = (1.0 - preview_fps * elapsed) / preview_fps;
+    Fl::repeat_timeout(wait > 0 ? wait : 0.005, previewImpl, data);
+}
+
+void GUI::onPreview(Fl_Widget *, void *data) {
+    assert(data);
+
+    GUI *self = static_cast<GUI *>(data);
+    if (show_preview) {
+        show_preview = false;
+        return;
+    }
+    show_details = false;
+    show_preview = true;
+
+    auto [imgW, imgH] = Capturer::getInstance().getResolution();
+    auto preview_w = self->preview->w();
+    auto preview_h = self->preview->h();
+
+    double scale = std::min((double)preview_w / imgW, (double)preview_h / imgH);
+    self->img_size = {(size_t)(imgW * scale), (size_t)(imgH * scale)};
+
+    LOG_INFO_STREAM << "Start preview, "
+                    << " size: " << preview_w << "x" << preview_h << ",  Scale: " << scale;
+
+    Fl::add_timeout(20, [](void *) { show_preview = false; });
+    self->previewImpl(data);
+
+    self->display->hide();
+    self->detail->hide();
+    self->preview->show();
 }
 
 void GUI::init(std::function<void()> callback) {
@@ -165,19 +264,19 @@ void GUI::init(std::function<void()> callback) {
     input_fps = std::make_unique<Fl_Input>(fps_x, input_y, w, h, "FPS");
     input_fps->align(FL_ALIGN_TOP);
     input_fps->value(g_config.fps);
-    input_fps->callback(digitCheck, (void*)"FPS");
+    input_fps->callback(digitCheck, (void *)"FPS");
     input_fps->labelcolor(DEFAULT_FONT_COLOR);
 
     int quality_x = fps_x + dx;
-    choice_quality = std::make_unique<Fl_Choice>(quality_x, input_y, w+8, h, "Quality");
+    choice_quality = std::make_unique<Fl_Choice>(quality_x, input_y, w + 8, h, "Quality");
     choice_quality->align(FL_ALIGN_TOP);
     for (int i = 1; i <= 10; ++i) {
         std::string label = std::to_string(i * 10) + "%";
         choice_quality->add(label.c_str());
     }
     choice_quality->value(g_config.quality * 10 - 1);
-    choice_quality->callback([](Fl_Widget* w, void* data){
-        Fl_Choice* choice = (Fl_Choice*)w;
+    choice_quality->callback([](Fl_Widget *w, void *data) {
+        Fl_Choice *choice = (Fl_Choice *)w;
         g_config.quality = (choice->value() + 1) / 10.0f;
         pages::setup();
         LOG_INFO_STREAM << "Update quality: " << g_config.quality;
@@ -186,7 +285,7 @@ void GUI::init(std::function<void()> callback) {
     choice_quality->color(DEFAULT_BG_COLOR);
 
     int status_x = quality_x + dx + 10;
-    int status_w = w*3 + 10;
+    int status_w = w * 3 + 15;
     output_status = std::make_unique<Fl_Output>(status_x, input_y, status_w, h);
     output_status->align(FL_ALIGN_CENTER);
     output_status->value("");
@@ -198,22 +297,27 @@ void GUI::init(std::function<void()> callback) {
 
     Fl::add_timeout(TIMEOUT_INTERVAL, onTimeout, this);
 
-    int start_x = status_x + status_w + 15;
-    button_start = std::make_unique<Fl_Button>(start_x, input_y-5, w, h+10, "Start");
+    int start_x = status_x + status_w + 10;
+    button_start = std::make_unique<Fl_Button>(start_x, input_y - 5, w, h + 10, "Start");
     button_start->color(DEFAULT_BG_COLOR);
     button_start->labelsize(28);
     button_start->labelfont(FL_BOLD);
-    button_start->callback([](Fl_Widget* w, void* data) {
-        GUI* self = static_cast<GUI*>(data);
-        Fl_Button* btn = static_cast<Fl_Button*>(w);
-        btn->deactivate();
-        self->callback();
-        self->display->take_focus();
-    }, this);
+    button_start->callback(
+        [](Fl_Widget *w, void *data) {
+            GUI *self = static_cast<GUI *>(data);
+            Fl_Button *btn = static_cast<Fl_Button *>(w);
+            btn->deactivate();
+            self->callback();
+            self->display->take_focus();
+        },
+        this);
+    button_start->tooltip("Start/Stop");
 
+    // about + info + detail
+    int btn_width = 25;
     int info_x = 30;
     int info_y = input_y + dy;
-    int info_w = width - info_x - 35;
+    int info_w = width - info_x - 65;
     info = std::make_unique<Fl_Output>(info_x, info_y, info_w, h);
     info->readonly(1);
     // info->box(FL_FLAT_BOX);
@@ -226,41 +330,57 @@ void GUI::init(std::function<void()> callback) {
 
     int btn_about_x = 5;
     int btn_about_y = info_y;
-    button_about = std::make_unique<Fl_Button>(btn_about_x, btn_about_y, 25, h, "ⓘ"); 
+    button_about = std::make_unique<Fl_Button>(btn_about_x, btn_about_y, btn_width, h, "ⓘ");
     button_about->color(DEFAULT_BG_COLOR);
     button_about->callback(onAbout, this);
     button_about->labelfont(FL_BOLD);
     button_about->box(FL_FLAT_BOX);
+    button_about->tooltip("About");
 
     int btn_detail_x = info_x + info_w + 5;
     int btn_detail_y = info_y;
-    button_detail  = std::make_unique<Fl_Button>(btn_detail_x, btn_detail_y, 25, h, "☰");
+    button_detail = std::make_unique<Fl_Button>(btn_detail_x, btn_detail_y, btn_width, h, "☰");
     button_detail->color(DEFAULT_BG_COLOR);
     button_detail->labelfont(FL_BOLD);
     // button_detail->box(FL_FLAT_BOX);
     button_detail->callback(onDetail, this);
-    
+    button_detail->tooltip("Details");
+
+    int btn_preview_x = btn_detail_x + btn_width + 5;
+    int btn_preview_y = info_y;
+    button_preview = std::make_unique<Fl_Button>(btn_preview_x, btn_preview_y, btn_width, h, "▨");
+    button_preview->color(DEFAULT_BG_COLOR);
+    button_preview->labelfont(FL_BOLD);
+    button_preview->callback(onPreview, this);
+    button_preview->tooltip("Preview");
+
     int display_x = 5;
     int display_y = info_y + dy - 5;
     int display_w = width - 10;
     int display_h = height - display_y - 5;
     text_buf = std::make_unique<Fl_Text_Buffer>();
     display = std::make_unique<Fl_Text_Display>(display_x, display_y, display_w, display_h);
-    display->buffer(text_buf.get());  
-    display->color(FL_BLACK);       // 背景色设为黑色
-    display->textcolor(FL_WHITE);   // 文字颜色设为白色
-    display->textsize(14);          // 可选：设置字体大小
-    display->textfont(FL_COURIER);  // 等宽字体（适合日志）
+    display->buffer(text_buf.get());
+    display->color(FL_BLACK);      // 背景色设为黑色
+    display->textcolor(FL_WHITE);  // 文字颜色设为白色
+    display->textsize(14);         // 可选：设置字体大小
+    display->textfont(FL_COURIER); // 等宽字体（适合日志）
     display->take_focus();
     display->labelcolor(DEFAULT_BG_COLOR);
 
-    int about_x = display_x + 5;
-    int about_y = display_y + 5;
-    int about_w = display_w - 10; 
-    int about_h = display_h - 10; 
-    about = std::make_unique<Fl_Box>(about_x, about_y, about_w, about_h);
-    about->box(FL_FRAME_BOX);
-    about->hide();
+    int preview_x = display_x + 5;
+    int preview_y = display_y + 5;
+    int preview_w = display_w - 10;
+    int preview_h = display_h - 10;
+    preview = std::make_unique<Fl_Box>(preview_x, preview_y, preview_w, preview_h);
+    preview->box(FL_FLAT_BOX);
+    preview->labelcolor(DEFAULT_BG_COLOR);
+    preview->color(DEFAULT_BG_COLOR);
+    preview->hide();
+
+    detail = std::make_unique<Fl_Box>(preview_x, preview_y, preview_w, preview_h);
+    detail->box(FL_FRAME_BOX);
+    detail->hide();
 }
 
 void GUI::activate() {
@@ -269,7 +389,7 @@ void GUI::activate() {
     button_start->label("▶");
     button_start->activate();
     button_start->labelcolor(FL_DARK_GREEN);
-    info->value("");
+    info->value("Not Running!");
 }
 
 void GUI::deactivate() {
@@ -278,13 +398,14 @@ void GUI::deactivate() {
     button_start->label("▣");
     button_start->activate();
     button_start->labelcolor(FL_RED);
+    onPreview(nullptr, this);
 }
 
-void GUI::setInfo(const std::string& label) {
+void GUI::setInfo(const std::string &label) {
     info->value(label.c_str());
 }
 
-void GUI::output(const char* s, size_t n) {
+void GUI::output(const char *s, size_t n) {
     text_buf->append(s, n);
     display->scroll(INT_MAX, 0);
 }
@@ -308,14 +429,14 @@ bool GUI::updateArgs() {
         g_config.fps = t;
 
         t = std::stoi(input_timeout->value());
-        if (t < 10 || t > 86400) {
-            info->value("Invalid Timeout! (10~86400)");
+        if (t < 0 || t > 604800) { // 7 days, 0 for infinity
+            info->value("Invalid Timeout! (0~604800)");
             goto FAILED;
         }
         g_config.timeout = t;
 
         g_config.quality = (choice_quality->value() + 1) / 10.0f;
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         LOG_ERROR_STREAM << "Error parsing arguments: " << e.what();
         std::string err = "Error: ";
         err += e.what();
@@ -342,7 +463,7 @@ int GUI::run() {
 #include "assets/favicon.xpm"
     Fl_Pixmap ico(favicon);
     Fl_RGB_Image img(&ico);
-    window->icon(&img); 
+    window->icon(&img);
 #endif
 
     window->color(DEFAULT_BG_COLOR);

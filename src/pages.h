@@ -1,5 +1,4 @@
-#ifndef PAGES_H
-#define PAGES_H
+#pragma once
 
 #include "server.h"
 
@@ -12,4 +11,3 @@ std::unordered_map<std::string, time_t> getReqs();
 
 }
 
-#endif

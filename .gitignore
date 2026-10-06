@@ -12,3 +12,4 @@ leaksrun.sh
 *.app
 src/assets/output
 .cache/
+test.h264

@@ -1,6 +1,6 @@
 enable_testing()
 
-include_directories(../src)
+include_directories(${CMAKE_SOURCE_DIR}/src)
 
 find_package(GTest REQUIRED)
 
@@ -16,6 +16,9 @@ target_link_libraries(test_perf_capture PRIVATE ${TEST_LIBS})
 
 add_executable(test_perf_rgba test_perf_rgba.cpp)
 target_link_libraries(test_perf_rgba PRIVATE ${TEST_LIBS})
+
+# add_executable(test_h264 test_h264.cpp)
+# target_link_libraries(test_h264 PRIVATE ${TEST_LIBS})
 
 
 

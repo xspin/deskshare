@@ -16,6 +16,9 @@ hasArg() {
     return 1
 }
 
+VERSION=$(cat CMakeLists.txt | grep 'deskshare VERSION' | awk '{print $3}')
+VERSION=${VERSION%)}
+
 hasArg clean
 if [ $? -eq 0 ]; then
     echo "Clean ..."
@@ -34,13 +37,13 @@ if [ $? -eq 0 ]; then
     hdiutil create -volname "deskshare" \
         -srcfolder /tmp/dmg-src \
         -ov -format UDZO \
-        ./build/deskshare-macos-${arch}.dmg
+        ./build/deskshare-${VERSION}-darwin-${arch}.dmg
     exit $?
 fi
 
 hasArg zip
 if [ $? -eq 0 ]; then
-    zipfile=build/deskshare-windows-x86_64.zip
+    zipfile=build/deskshare-${VERSION}-windows-x86_64.zip
     rm -f $zipfile
     zip -j $zipfile build/bin/deskshare.exe
     exit $?

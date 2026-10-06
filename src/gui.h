@@ -19,8 +19,6 @@
 
 #include "capture/capturer.h"
 
-class AboutDialog;
-
 class GUI {
 
   public:
@@ -34,18 +32,29 @@ class GUI {
     void activate();
     void setInfo(const std::string &label);
     bool updateArgs();
-    void onMessage(const char *msg);
 
   private:
     static void onTimeout(void *data);
     static void onAbout(Fl_Widget *w, void *data);
     static void onDetail(Fl_Widget *w, void *data);
-    static void onPreview(Fl_Widget *w, void *data);
+    // static void onPreview(Fl_Widget *w, void *data);
     static void previewImpl(void *data);
+    static void onLog(Fl_Widget *w, void *data);
+
+    void onMessage(const char *msg);
+    void previewOn();
+    void previewOff();
+    void focusHandle(int event);
 
   private:
     int width;
     int height;
+
+    bool show_preview;
+    bool show_detail;
+    bool show_log;
+    bool focused;
+
     std::function<void()> callback;
     std::unique_ptr<Fl_Window> window;
 
@@ -59,7 +68,7 @@ class GUI {
     std::unique_ptr<Fl_Button> button_about;
     std::unique_ptr<Fl_Output> info;
     std::unique_ptr<Fl_Button> button_detail;
-    std::unique_ptr<Fl_Button> button_preview;
+    std::unique_ptr<Fl_Button> button_log;
 
     std::unique_ptr<Fl_Box> detail;
     std::unique_ptr<Fl_Box> preview;

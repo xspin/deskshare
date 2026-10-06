@@ -8,9 +8,7 @@
 #include <iomanip>
 #include <memory>
 
-static const int preview_fps = 10;
-static volatile bool show_preview = false;
-static volatile bool show_details = false;
+static const int preview_fps = 5;
 
 static inline const std::string compilerInfo() {
     std::stringstream ss;
@@ -30,9 +28,46 @@ static const Fl_Color DEFAULT_BG_COLOR = fl_rgb_color(236, 236, 236);
 
 static const Fl_Color DEFAULT_FONT_COLOR = fl_rgb_color(67, 67, 67);
 
+class GuiWindow : public Fl_Window {
+  public:
+    using EventHandler = std::function<void(void)>;
+
+    GuiWindow(int W, int H, const char *title) : Fl_Window(W, H, title) {
+    }
+
+    int handle(int event) override {
+        static int prev = 0;
+        switch (event) {
+        case FL_UNFOCUS:
+            if (prev != FL_PUSH && prev != FL_SHORTCUT && onUnfocus) {
+                onUnfocus();
+            }
+            break;
+        case FL_FOCUS:
+        case FL_PUSH:
+        case FL_RELEASE:
+            LOG_DEBUG_STREAM << "event " << event;
+            if (onFocus) {
+                onFocus();
+            }
+            break;
+        }
+        // LOG_DEBUG_STREAM << "a event " << event;
+        prev = event;
+        return Fl_Window::handle(event);
+    }
+
+    EventHandler onFocus;
+    EventHandler onUnfocus;
+};
+
 GUI::GUI() {
     Fl_Tooltip::delay(0.5);
     Fl_Tooltip::hoverdelay(0);
+    show_preview = false;
+    show_detail = false;
+    show_log = false;
+    focused = true;
 }
 
 GUI::~GUI() {
@@ -87,22 +122,17 @@ void GUI::onTimeout(void *data) {
 }
 
 void GUI::onMessage(const char *msg) {
-    if (show_preview) {
-        show_preview = false;
-    }
 
-    if (show_details) {
-        show_details = false;
-        if (show_preview)
-            return;
-        this->preview->hide();
-        this->detail->hide();
-        this->display->show();
+    if (show_detail) {
+        show_detail = false;
+        this->previewOn();
         return;
     }
 
-    show_details = true;
+    LOG_DEBUG_STREAM << "show detail/about";
     show_preview = false;
+    show_log = false;
+    show_detail = true;
     this->detail->label(msg);
     this->preview->hide();
     this->display->hide();
@@ -111,15 +141,10 @@ void GUI::onMessage(const char *msg) {
     Fl::add_timeout(
         10,
         [](void *data) {
-            if (!show_details)
+            auto self = static_cast<GUI *>(data);
+            if (!self->show_detail)
                 return;
-            show_details = false;
-            if (show_preview)
-                return;
-            GUI *self = static_cast<GUI *>(data);
-            self->preview->hide();
-            self->detail->hide();
-            self->display->show();
+            self->previewOn();
         },
         this);
 }
@@ -168,23 +193,15 @@ void GUI::previewImpl(void *data) {
     frames++;
 
     GUI *self = static_cast<GUI *>(data);
-    if (!show_preview) {
-        if (!show_details) {
-            self->preview->hide();
-            self->detail->hide();
-            self->display->show();
-        }
-        double elapsed = Fl::seconds_since(start);
-        double fps = frames / elapsed;
-        LOG_INFO_STREAM << "Stop preview. " << std::fixed << std::setprecision(2) << fps << " fps";
-        frames = 0;
-        return;
-    }
 
     Fl_Timestamp frame_start = Fl::now();
     auto &cap = Capturer::getInstance();
     auto [width, height] = self->img_size;
     cap.captureRgba(self->pixel, width, height);
+
+    if (!self->show_preview) {
+        cap.rgbaToGray(self->pixel, width, height);
+    }
 
     if (!self->preview->image() || !self->img || self->img->array != self->pixel.data()) {
         self->img = std::make_unique<Fl_RGB_Image>(self->pixel.data(), width, height, 4);
@@ -195,21 +212,33 @@ void GUI::previewImpl(void *data) {
         self->preview->redraw();
     }
 
+    if (!self->show_preview) {
+        double elapsed = Fl::seconds_since(start);
+        double fps = frames / elapsed;
+        LOG_DEBUG_STREAM << "Stop preview. " << std::fixed << std::setprecision(2) << fps << " fps";
+        frames = 0;
+        return;
+    }
+
     double elapsed = Fl::seconds_since(frame_start);
 
     double wait = (1.0 - preview_fps * elapsed) / preview_fps;
     Fl::repeat_timeout(wait > 0 ? wait : 0.005, previewImpl, data);
 }
 
-void GUI::onPreview(Fl_Widget *, void *data) {
-    assert(data);
-
-    GUI *self = static_cast<GUI *>(data);
+void GUI::previewOn() {
+    GUI *self = this;
+    show_detail = false;
+    show_log = false;
     if (show_preview) {
-        show_preview = false;
         return;
     }
-    show_details = false;
+    if (!focused) {
+        self->display->hide();
+        self->detail->hide();
+        self->preview->show();
+        return;
+    }
     show_preview = true;
 
     auto [imgW, imgH] = Capturer::getInstance().getResolution();
@@ -219,15 +248,43 @@ void GUI::onPreview(Fl_Widget *, void *data) {
     double scale = std::min((double)preview_w / imgW, (double)preview_h / imgH);
     self->img_size = {(size_t)(imgW * scale), (size_t)(imgH * scale)};
 
-    LOG_INFO_STREAM << "Start preview, "
-                    << " size: " << preview_w << "x" << preview_h << ",  Scale: " << scale;
+    LOG_DEBUG_STREAM << "Start preview"
+                     << ", size: " << preview_w << "x" << preview_h << ", Scale: " << scale;
 
-    Fl::add_timeout(20, [](void *) { show_preview = false; });
-    self->previewImpl(data);
+    self->previewImpl(this);
 
     self->display->hide();
     self->detail->hide();
     self->preview->show();
+}
+
+void GUI::previewOff() {
+    show_preview = false;
+}
+
+void GUI::onLog(Fl_Widget *w, void *data) {
+    GUI *self = static_cast<GUI *>(data);
+    if (self->show_log) {
+        self->show_log = false;
+        self->previewOn();
+        return;
+    }
+    LOG_DEBUG_STREAM << "show log";
+    self->show_preview = false;
+    self->show_detail = false;
+    self->show_log = true;
+    self->detail->hide();
+    self->preview->hide();
+    self->display->show();
+    Fl::add_timeout(
+        10,
+        [](void *data) {
+            GUI *self = static_cast<GUI *>(data);
+            if (!self->show_log)
+                return;
+            self->previewOn();
+        },
+        self);
 }
 
 void GUI::init(std::function<void()> callback) {
@@ -242,8 +299,27 @@ void GUI::init(std::function<void()> callback) {
     int dx = w + 10;
     int dy = h + 10;
 
-    window = std::make_unique<Fl_Window>(width, height, "DeskShare " APP_VERSION);
-    window->position(500, 300);
+    auto p = std::make_unique<GuiWindow>(width, height, "DeskShare " APP_VERSION);
+    p->onFocus = [this] {
+        if (this->focused)
+            return;
+        LOG_DEBUG_STREAM << "Window Focus";
+        this->focused = true;
+        if (this->show_log || this->show_detail)
+            return;
+        this->previewOn();
+    };
+    p->onUnfocus = [this] {
+        LOG_DEBUG_STREAM << "Window Unfocus";
+        this->focused = false;
+        this->previewOff();
+    };
+
+    window = std::move(p);
+    int screen_w = Fl::w();
+    int screen_h = Fl::h();
+    // window->position(500, 300);
+    window->position((screen_w - width) / 2, (screen_h - height) / 2);
 
     int port_x = 20;
     int input_y = 20;
@@ -346,13 +422,13 @@ void GUI::init(std::function<void()> callback) {
     button_detail->callback(onDetail, this);
     button_detail->tooltip("Details");
 
-    int btn_preview_x = btn_detail_x + btn_width + 5;
-    int btn_preview_y = info_y;
-    button_preview = std::make_unique<Fl_Button>(btn_preview_x, btn_preview_y, btn_width, h, "▨");
-    button_preview->color(DEFAULT_BG_COLOR);
-    button_preview->labelfont(FL_BOLD);
-    button_preview->callback(onPreview, this);
-    button_preview->tooltip("Preview");
+    int btn_log_x = btn_detail_x + btn_width + 5;
+    int btn_log_y = info_y;
+    button_log = std::make_unique<Fl_Button>(btn_log_x, btn_log_y, btn_width, h, "⌘");
+    button_log->color(DEFAULT_BG_COLOR);
+    button_log->labelfont(FL_BOLD);
+    button_log->callback(onLog, this);
+    button_log->tooltip("Logs");
 
     int display_x = 5;
     int display_y = info_y + dy - 5;
@@ -367,6 +443,7 @@ void GUI::init(std::function<void()> callback) {
     display->textfont(FL_COURIER); // 等宽字体（适合日志）
     display->take_focus();
     display->labelcolor(DEFAULT_BG_COLOR);
+    display->hide();
 
     int preview_x = display_x + 5;
     int preview_y = display_y + 5;
@@ -381,6 +458,8 @@ void GUI::init(std::function<void()> callback) {
     detail = std::make_unique<Fl_Box>(preview_x, preview_y, preview_w, preview_h);
     detail->box(FL_FRAME_BOX);
     detail->hide();
+
+    previewOn();
 }
 
 void GUI::activate() {
@@ -398,7 +477,6 @@ void GUI::deactivate() {
     button_start->label("▣");
     button_start->activate();
     button_start->labelcolor(FL_RED);
-    onPreview(nullptr, this);
 }
 
 void GUI::setInfo(const std::string &label) {

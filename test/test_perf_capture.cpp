@@ -8,14 +8,16 @@ TEST(performance, capture) {
 
     Capturer &cap = Capturer::getInstance();
 
-    cap.capture(0.1);
+    std::vector<unsigned char> jpg;
+    size_t w, h;
+    cap.captureJpg(jpg, w, h, 0.1);
     for (float q = 0.2; q <= 1; q += 0.2) {
         auto start = std::chrono::high_resolution_clock::now();
         int frames = 100;
         fprintf(stdout, "testing for quality %.2f\n", q);
         fflush(stdout);
         for (int i = 0; i < frames; i++) {
-            cap.capture(q);
+            cap.captureJpg(jpg, w, h, q);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

@@ -11,8 +11,7 @@
 class CapturerManager {
   public:
     CapturerManager()
-        : loop(nullptr), timestamp(0), min_interval(100), quality(0.1), avg_interval(0),
-          cap(Capturer::getInstance()) {
+        : loop(nullptr), timestamp(0), min_interval(100), quality(0.1), avg_interval(0) {
     }
 
     ~CapturerManager() {
@@ -39,17 +38,17 @@ class CapturerManager {
         updateInterval(id);
         uint64_t now = uv_now(loop);
         if (now - timestamp >= avg_interval) {
-            if (!cap.capture(quality)) {
+            if (!Capturer::captureJpg(jpg, width, height, quality)) {
                 LOG_WARNING_STREAM << "capture failed";
             }
             g_config.frames++;
             timestamp = now;
         }
         captime[id] = now;
-        g_config.bytes += cap.jpg.size();
+        g_config.bytes += jpg.size();
         if (g_config.bytes > (1 << 30))
             g_config.bytes = 0;
-        return {reinterpret_cast<char *>(cap.jpg.data()), cap.jpg.size()};
+        return {reinterpret_cast<char *>(jpg.data()), jpg.size()};
     }
 
     void updateInterval(size_t id) {
@@ -125,7 +124,10 @@ class CapturerManager {
     uint64_t min_interval; // ms
     float quality;
     uint64_t avg_interval;
-    Capturer &cap;
+
+    std::vector<unsigned char> jpg;
+    size_t width;
+    size_t height;
 
     std::unordered_map<std::string, time_t> reqs;
     std::unordered_map<size_t, uint64_t> captime;

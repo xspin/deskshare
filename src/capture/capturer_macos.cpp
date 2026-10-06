@@ -45,7 +45,7 @@ static bool CGImageToRGBAData(std::vector<unsigned char> &rgba, CGImageRef image
     CGContextRef ctx = CGBitmapContextCreate(rgba.data(), width, height,
                                              8, // 每通道 8 位
                                              bytesPerRow, colorSpace,
-                                             kCGImageAlphaPremultipliedLast // RGBA
+                                             kCGImageAlphaNoneSkipLast // RGBA ignore alpha
     );
 
     // 把 CGImage 绘制进去，完成格式转换

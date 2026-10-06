@@ -96,6 +96,39 @@ static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap, siz
     return true;
 }
 
+static CLSID *getJpegEncoder() {
+    static bool cached = false;
+    static CLSID clsidJpegEncoder{};
+
+    if (cached) {
+        return &clsidJpegEncoder;
+    }
+    // 获取 JPEG 编码器 CLSID
+    UINT numEncoders = 0;
+    UINT sizeEncoders = 0;
+
+    // 先获取编码器信息大小
+    GetImageEncodersSize(&numEncoders, &sizeEncoders);
+    if (sizeEncoders == 0)
+        return nullptr;
+
+    // 分配内存存储编码器信息
+    std::vector<BYTE> encoderInfo(sizeEncoders);
+    ImageCodecInfo *pEncoderInfo = (ImageCodecInfo *)encoderInfo.data();
+
+    // 获取所有编码器信息并查找 JPEG 编码器
+    GetImageEncoders(numEncoders, sizeEncoders, pEncoderInfo);
+    for (UINT i = 0; i < numEncoders; ++i) {
+        if (wcscmp(pEncoderInfo[i].MimeType, L"image/jpeg") == 0) {
+            clsidJpegEncoder = pEncoderInfo[i].Clsid;
+            break;
+        }
+    }
+    cached = true;
+
+    return &clsidJpegEncoder;
+}
+
 // 将 HBITMAP 转为 JPEG 字节流（输出到 vector）
 static bool bitmapToJpeg(std::vector<unsigned char> &jpegData, HBITMAP hBitmap, int quality = 80) {
     if (!hBitmap)
@@ -119,31 +152,10 @@ static bool bitmapToJpeg(std::vector<unsigned char> &jpegData, HBITMAP hBitmap, 
     encoderParams.Parameter[0].NumberOfValues = 1;
     encoderParams.Parameter[0].Value = &quality;
 
-    // 获取 JPEG 编码器 CLSID
-    CLSID clsidJpegEncoder;
-    UINT numEncoders = 0;
-    UINT sizeEncoders = 0;
-
-    // 先获取编码器信息大小
-    GetImageEncodersSize(&numEncoders, &sizeEncoders);
-    if (sizeEncoders == 0)
-        return false;
-
-    // 分配内存存储编码器信息
-    std::vector<BYTE> encoderInfo(sizeEncoders);
-    ImageCodecInfo *pEncoderInfo = (ImageCodecInfo *)encoderInfo.data();
-
-    // 获取所有编码器信息并查找 JPEG 编码器
-    GetImageEncoders(numEncoders, sizeEncoders, pEncoderInfo);
-    for (UINT i = 0; i < numEncoders; ++i) {
-        if (wcscmp(pEncoderInfo[i].MimeType, L"image/jpeg") == 0) {
-            clsidJpegEncoder = pEncoderInfo[i].Clsid;
-            break;
-        }
-    }
+    CLSID *clsidJpegEncoder = getJpegEncoder();
 
     // 将位图编码为 JPEG 并写入内存流
-    if (bitmap.Save(pStream, &clsidJpegEncoder, &encoderParams) != Ok) {
+    if (bitmap.Save(pStream, clsidJpegEncoder, &encoderParams) != Ok) {
         pStream->Release();
         return false;
     }

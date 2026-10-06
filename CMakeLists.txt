@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.10)
 project(deskshare VERSION 1.2.3)
 message("Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
 
+set(VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+set(VERSION_MINOR ${PROJECT_VERSION_MINOR})
+set(VERSION_PATCH ${PROJECT_VERSION_PATCH})
+
 # WIN32 / UNIX / DARWIN
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(DARWIN TRUE)
@@ -14,7 +18,7 @@ message("System Processor: ${CMAKE_SYSTEM_PROCESSOR}")
 
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "Compiler ID: ${CMAKE_CXX_COMPILER_ID}")
-message(STATUS "COmpiler version: ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "Compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
 option(ENABLE_ASAN "Enable Address Sanitizer for memory leak detection" OFF)
 option(ENABLE_DEBUG "Enable Debug compile" OFF)
@@ -86,7 +90,51 @@ if (NOT ( LIBUV AND LIBCRYPTO ) )
     message(FATAL_ERROR "required lib not found!")
 endif()
 
+set(FFMPEG_LIB_DIR "/usr/local/Cellar/ffmpeg/7.0.2/lib")
 
+if (ENABLE_FFMPEG_STATIC)
+
+    set(FFMPEG_LIB_DIR "$ENV{HOME}/Code/git/ffmpeg_master/build/lib")
+    set(FFMPEG_INC_DIR "$ENV{HOME}/Code/git/ffmpeg_master/build/include")
+
+    add_library(avutil STATIC IMPORTED)
+    set_target_properties(avutil PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavutil.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
+    )
+
+    add_library(avcodec STATIC IMPORTED)
+    set_target_properties(avcodec PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavcodec.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
+    )
+
+    add_library(swscale STATIC IMPORTED)
+    set_target_properties(swscale PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libswscale.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
+    )
+
+else()
+    add_library(avutil SHARED IMPORTED)
+    set_target_properties(avutil PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavutil.dylib)
+
+    add_library(avcodec SHARED IMPORTED)
+    set_target_properties(avcodec PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavcodec.dylib)
+
+    add_library(swscale SHARED IMPORTED)
+    set_target_properties(swscale PROPERTIES 
+        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libswscale.dylib)
+
+endif()
+
+set(FFMPEG_LIBS
+    swscale avcodec avutil
+)
+
+# include_directories(${FFMPEG_INC_DIR})
 # include_directories(/usr/local/include)
 
 if (WIN32)
@@ -110,6 +158,7 @@ if (ENABLE_ASAN)
 endif()
 
 set(SRC
+    # src/h264/h264.cpp
     src/capture/capturer.cpp
     src/utils.cpp
     src/logger.cpp
@@ -161,15 +210,26 @@ if (DARWIN AND ENABLE_GUI)
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.example.deskshare"  # 唯一标识（反向域名格式）
         # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist" 
     )
-
+elseif (WIN32 AND ENABLE_GUI)
+    configure_file(
+        ${CMAKE_SOURCE_DIR}/version.rc.in
+        ${CMAKE_BINARY_DIR}/version.rc
+        @ONLY  # 只替换 @VAR@ 形式，避免与 RC 自身的语法冲突
+    )
+    add_executable(deskshare
+        ${SRC}
+        ${CMAKE_BINARY_DIR}/version.rc
+    )
 else()
     add_executable(deskshare ${SRC})
 
 endif()
 
+
 set(LIBS
     ${LIBUV}
     ${LIBCRYPTO}
+    # ${FFMPEG_LIBS}
 )
 
 if (ENABLE_GUI)
@@ -183,6 +243,11 @@ if (DARWIN)
         "-framework ImageIO"
         "-framework CoreServices"
         "-framework Cocoa"
+
+        # for ffmpeg
+        # "-framework CoreVideo"
+        # iconv
+        # x264
     )
 
 elseif (WIN32)
@@ -235,6 +300,7 @@ endif()
 
 if (ENABLE_TEST)
     add_library(unittest STATIC
+        # src/h264/h264.cpp
         src/capture/capturer.h
         src/capture/capturer.cpp
         src/utils.h

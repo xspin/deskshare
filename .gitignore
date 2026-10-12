@@ -13,3 +13,5 @@ leaksrun.sh
 src/assets/output
 .cache/
 test.h264
+h264_ffmpeg/
+easyplayer@5.1.4/

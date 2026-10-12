@@ -14,7 +14,7 @@ TEST(performance, capture) {
     for (float q = 0.2; q <= 1; q += 0.2) {
         auto start = std::chrono::high_resolution_clock::now();
         int frames = 100;
-        fprintf(stdout, "testing for quality %.2f\n", q);
+        fprintf(stdout, "testing for quality %.2f, %lux%lu\n", q, w, h);
         fflush(stdout);
         for (int i = 0; i < frames; i++) {
             cap.captureJpg(jpg, w, h, q);

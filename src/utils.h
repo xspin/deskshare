@@ -18,12 +18,13 @@ struct Args {
     bool debug = false;
     int port = 2333;
     float quality = 0.6;
-    int fps = 7;
+    int fps = 10;
     int timeout = 3600; // seconds
     bool color = 0;
-    size_t clients = 0;
-    size_t frames = 0;
-    size_t bytes = 0;
+    bool h264 = true;
+    // size_t clients = 0;
+    // size_t frames = 0;
+    // size_t bytes = 0;
 
     std::string str() {
         std::stringstream ss;
@@ -32,6 +33,7 @@ struct Args {
            << "quality: " << quality << ", "
            << "timeout: " << timeout << ", "
            << "fps: " << fps << ", "
+           << "encoder: " << (h264 ? "H264" : "MJPEG") << ", "
            << "debug: " << debug << " }";
         return ss.str();
     }
@@ -71,4 +73,3 @@ template <size_t N> struct is_string_like<char[N]> : std::true_type {};
 template <typename T> constexpr bool is_string_like_v = is_string_like<T>::value;
 
 } // namespace utils
-

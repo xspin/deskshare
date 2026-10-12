@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(deskshare VERSION 1.2.3)
+project(deskshare VERSION 1.3.0)
 message("Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
 
 set(VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
@@ -56,6 +56,9 @@ elseif (DARWIN)
     set(FLTK_ROOT_DIR "/usr/local/opt/fltk")
     set(FLTK_LIB_DIR "${FLTK_ROOT_DIR}/lib")
     set(FLTK_INCLUDE_DIR "${FLTK_ROOT_DIR}/include")
+
+    set(X264_LIB_DIR "/usr/local/opt/x264/lib")
+    set(LOCAL_LIB_DIR "/usr/local/lib")
 endif()
 
 include_directories(${LIBUV_ROOT_DIR}/include)
@@ -72,11 +75,21 @@ find_library(LIBCRYPTO
     PATHS ${OPENSSL_LIB_DIR}
 )
 
-if (ENABLE_GUI)
-find_library(LIBFLTK
-    NAMES libfltk.a libfltk.lib
-    PATHS ${FLTK_LIB_DIR}
+find_library(LIBX264
+    NAMES libx264.a
+    PATHS ${X264_LIB_DIR}
 )
+
+find_library(LIBYUV
+    NAMES libyuv.a
+    PATHS ${LOCAL_LIB_DIR}
+)
+
+if (ENABLE_GUI)
+    find_library(LIBFLTK
+        NAMES libfltk.a libfltk.lib
+        PATHS ${FLTK_LIB_DIR}
+    )
     message(STATUS "Find libfltk: ${LIBFLTK}")
     if (NOT LIBFLTK)
         message(FATAL_ERROR "FLTK lib not found!")
@@ -85,53 +98,23 @@ endif()
 
 message(STATUS "Find libuv: ${LIBUV}")
 message(STATUS "Find libcrypto: ${LIBCRYPTO}")
+message(STATUS "Find libx264: ${LIBX264}")
+message(STATUS "Find libyuv: ${LIBYUV}")
 
-if (NOT ( LIBUV AND LIBCRYPTO ) )
+if (NOT ( LIBUV AND LIBCRYPTO AND LIBX264 AND LIBYUV ) )
     message(FATAL_ERROR "required lib not found!")
 endif()
 
-set(FFMPEG_LIB_DIR "/usr/local/Cellar/ffmpeg/7.0.2/lib")
 
-if (ENABLE_FFMPEG_STATIC)
+# add_library(x264 STATIC IMPORTED)
+# set_target_properties(x264 PROPERTIES 
+#     IMPORTED_LOCATION /usr/local/opt/x264/lib/libx264.a 
+# )
+#
 
-    set(FFMPEG_LIB_DIR "$ENV{HOME}/Code/git/ffmpeg_master/build/lib")
-    set(FFMPEG_INC_DIR "$ENV{HOME}/Code/git/ffmpeg_master/build/include")
-
-    add_library(avutil STATIC IMPORTED)
-    set_target_properties(avutil PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavutil.a
-        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
-    )
-
-    add_library(avcodec STATIC IMPORTED)
-    set_target_properties(avcodec PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavcodec.a
-        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
-    )
-
-    add_library(swscale STATIC IMPORTED)
-    set_target_properties(swscale PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libswscale.a
-        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_INC_DIR}
-    )
-
-else()
-    add_library(avutil SHARED IMPORTED)
-    set_target_properties(avutil PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavutil.dylib)
-
-    add_library(avcodec SHARED IMPORTED)
-    set_target_properties(avcodec PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavcodec.dylib)
-
-    add_library(swscale SHARED IMPORTED)
-    set_target_properties(swscale PROPERTIES 
-        IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libswscale.dylib)
-
-endif()
-
-set(FFMPEG_LIBS
-    swscale avcodec avutil
+set(H264_LIBS
+    ${LIBX264}
+    ${LIBYUV}
 )
 
 # include_directories(${FFMPEG_INC_DIR})
@@ -158,13 +141,15 @@ if (ENABLE_ASAN)
 endif()
 
 set(SRC
-    # src/h264/h264.cpp
+    src/h264/h264.cpp
     src/capture/capturer.cpp
     src/utils.cpp
+    src/assets/assets.cpp
     src/logger.cpp
-    src/pages.cpp
     src/websocket.cpp
     src/server.cpp
+    src/stream.cpp
+    src/pages.cpp
 )
 
 if (ENABLE_GUI)
@@ -229,7 +214,7 @@ endif()
 set(LIBS
     ${LIBUV}
     ${LIBCRYPTO}
-    # ${FFMPEG_LIBS}
+    ${H264_LIBS}
 )
 
 if (ENABLE_GUI)
@@ -243,11 +228,6 @@ if (DARWIN)
         "-framework ImageIO"
         "-framework CoreServices"
         "-framework Cocoa"
-
-        # for ffmpeg
-        # "-framework CoreVideo"
-        # iconv
-        # x264
     )
 
 elseif (WIN32)
@@ -300,7 +280,7 @@ endif()
 
 if (ENABLE_TEST)
     add_library(unittest STATIC
-        # src/h264/h264.cpp
+        src/h264/h264.cpp
         src/capture/capturer.h
         src/capture/capturer.cpp
         src/utils.h

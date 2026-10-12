@@ -1,6 +1,8 @@
 #include "utils.h"
 #include <algorithm>
+#include <iomanip>
 #include <sstream>
+#include <string>
 #include <unistd.h>
 
 Args g_config;
@@ -9,21 +11,23 @@ namespace utils {
 
 int parse_args(Args &args, int argc, char *argv[]) {
     std::stringstream help;
-    help << "DeskShare " APP_VERSION << " ( Tool to share screen on web browser )\n"
-         << "Usage: " << argv[0] << " [-h] [-d] [-p PORT] [-q QUALITY] [-f FPS] [-t SECONDS]\n"
-         << "    -h           show this helpful usage message\n"
-         << "    -p PORT      specify the http port (default " << args.port << ")\n"
-         << "    -q QUALITY   specify jpeg compress quality (0~1) (default " << args.quality
+    help << "DeskShare " APP_VERSION << "\nTool to share screen on web browser\n"
+         << "Usage: deskshare"
+         << " [-h] [-d] [-p PORT] [-q QUALITY] [-f FPS] [-t SECONDS] [-e h264|jpeg]\n"
+         << "    -h                 show this helpful usage message\n"
+         << "    -p PORT            specify the http port (default " << args.port << ")\n"
+         << "    -q QUALITY         specify jpeg compress quality (0~1) (default " << args.quality
          << ")\n"
-         << "    -f FPS       specify max fps (default " << args.fps << ")\n"
-         << "    -t SECONDS   idl timeout to exit (default " << args.timeout
+         << "    -f FPS             specify max fps (default " << args.fps << ")\n"
+         << "    -t SECONDS         idl timeout to exit (default " << args.timeout
          << ", 0 for infinity)\n"
-         << "    -c           colored log output (default disabled on windows)\n"
-         << "    -v           show version info\n"
-         << "    -d           log in debug level";
+         << "    -c                 colored log output (default disabled on windows)\n"
+         << "    -e <h264|jpeg>     specify encoder (default h264)\n"
+         << "    -v                 show version info\n"
+         << "    -d                 log in debug level";
 
     int opt;
-    while ((opt = getopt(argc, argv, "t:f:q:p:dhcv")) != -1) {
+    while ((opt = getopt(argc, argv, "t:f:q:p:e:dhcv")) != -1) {
         switch (opt) {
         case 'v':
             std::cout << "DeskShare version " << APP_VERSION << std::endl;
@@ -35,6 +39,15 @@ int parse_args(Args &args, int argc, char *argv[]) {
                 return -1;
             }
             break;
+        case 'e': {
+            std::string e = optarg;
+            if (e != "h264" && e != "jpeg") {
+                std::cerr << "invalid encoder: " << e << std::endl;
+                return -1;
+            }
+            args.h264 = (e == "h264");
+            break;
+        }
         case 'p':
             args.port = std::stoi(optarg);
             break;
@@ -218,7 +231,7 @@ std::string speedString(size_t bps) {
     size_t MB = KB * 1024;
     std::stringstream ss;
     if (bps >= MB) {
-        ss << bps / MB << " MB/s";
+        ss << std::setprecision(2) << (float)bps / MB << " MB/s";
     } else if (bps >= KB) {
         ss << bps / KB << " KB/s";
     } else {

@@ -1,5 +1,6 @@
 #include "capturer.h"
 #include <cassert>
+#include <cstddef>
 #include <vector>
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -9,7 +10,8 @@
 #endif
 
 namespace impl {
-bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height);
+bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
+bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height);
 bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality);
 std::pair<size_t, size_t> getCursorLoc();
 std::pair<size_t, size_t> getScreenResolution();
@@ -21,8 +23,37 @@ bool Capturer::captureJpg(std::vector<unsigned char> &jpg, size_t &width, size_t
     return impl::captureScreen(jpg, width, height, quality);
 }
 
-bool Capturer::captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+bool Capturer::captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
     return impl::captureRgba(rgba, width, height);
+}
+
+bool Capturer::captureRgba(std::vector<unsigned char> &rgba) {
+    size_t width, height;
+    return impl::captureRgba(rgba, width, height);
+}
+
+bool Capturer::captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+    return impl::captureRgbaScaled(rgba, width, height);
+}
+
+bool Capturer::captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    static int frame_idx = 0;
+    auto r = impl::getScreenResolution();
+    width = r.first;
+    height = r.second;
+    rgba.resize(width * height * 4);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int idx = (y * width + x) * 3;
+            rgba[idx] = (x + frame_idx) % 256;     // R
+            rgba[idx + 1] = (y + frame_idx) % 256; // G
+            rgba[idx + 2] = (x + y) % 256;         // B
+                                                   // A
+        }
+    }
+    frame_idx++;
+    return true;
 }
 
 std::pair<size_t, size_t> Capturer::getCursorPos() {

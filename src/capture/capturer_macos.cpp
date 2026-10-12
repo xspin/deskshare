@@ -7,12 +7,9 @@
 namespace impl {
 
 // 截取指定显示器的全屏图像
-static CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
+static inline CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
     // 直接从显示器帧缓冲区创建图像（无数据拷贝，高效）
     CGImageRef image = CGDisplayCreateImage(displayID);
-    if (!image) {
-        // std::cerr << "Failed to capture full screen" << std::endl;
-    }
     return image;
 }
 
@@ -30,9 +27,6 @@ static CGImageRef captureScreenRect(CGDirectDisplayID displayID, CGRect rect) {
 
 static bool CGImageToRGBAData(std::vector<unsigned char> &rgba, CGImageRef image, size_t width,
                               size_t height) {
-    // 假设 image 是一个 CGImageRef
-    // size_t width = CGImageGetWidth(image);
-    // size_t height = CGImageGetHeight(image);
     size_t bytesPerRow = width * 4; // RGBA 每像素 4 字节
 
     // 创建 RGBA 色彩空间
@@ -54,10 +48,42 @@ static bool CGImageToRGBAData(std::vector<unsigned char> &rgba, CGImageRef image
     return true;
 }
 
+bool saveCGImageAsJPEG(CGImageRef image, CFURLRef url, size_t logicalWidth, size_t logicalHeight) {
+    // 1. 设置目标属性，指定最大像素尺寸
+    // 这里传入逻辑宽高，ImageIO 会自动缩放。
+    // 注意：它会保持宽高比，所以传入的宽/高应与你期望的输出比例一致。
+    const void *keys[] = {kCGImageDestinationImageMaxPixelSize};
+    const void *values[] = {
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &logicalWidth)}; // 通常以宽度为准
+    // 如果宽高比与源图一致，也可以只传宽度或高度。
+    CFDictionaryRef properties =
+        CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+                           &kCFTypeDictionaryValueCallBacks);
+
+    // 2. 创建 JPEG 目标
+    CGImageDestinationRef destination =
+        CGImageDestinationCreateWithURL(url, CFSTR("public.jpeg"), 1, NULL);
+    if (!destination) { /* 错误处理 */
+    }
+
+    // 3. 添加图像并设置属性（如果有其他属性如压缩质量，可合并字典）
+    CGImageDestinationAddImage(destination, image, properties);
+
+    // 4. 完成写入
+    bool success = CGImageDestinationFinalize(destination);
+
+    // 5. 清理
+    CFRelease(destination);
+    CFRelease(properties);
+    // 注意：需要根据 CFNumberCreate 的返回值决定是否释放 values 中的对象。
+
+    return success;
+}
+
 // 现在 pixelData 里就是明确的 RGBA 数据了
 // 可以送入 x264 或做色彩转换
 static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef image,
-                              float quality) {
+                              size_t logicalWidth, float quality) {
     if (!image)
         return false;
 
@@ -69,9 +95,7 @@ static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef i
     // 2. 创建 JPEG 输出目标（写入内存数据）
     CFStringRef jpegType = kUTTypeJPEG;
     // CFStringRef jpegType = UTTypeJPEG;
-    CGImageDestinationRef destination = CGImageDestinationCreateWithData(data, jpegType,
-                                                                         1, // 单张图像
-                                                                         NULL);
+    CGImageDestinationRef destination = CGImageDestinationCreateWithData(data, jpegType, 1, NULL);
     if (!destination) {
         CFRelease(data);
         return false;
@@ -80,9 +104,12 @@ static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef i
     // 3. 设置压缩质量
     CFMutableDictionaryRef options = CFDictionaryCreateMutable(
         kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    CFNumberRef maxPix =
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &logicalWidth); // 通常以宽度为准
     CFNumberRef qualityNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberFloatType, &quality);
     CFDictionarySetValue(options, kCGImageDestinationLossyCompressionQuality, qualityNum);
-    CFRelease(qualityNum);
+    CFDictionarySetValue(options, kCGImageDestinationImageMaxPixelSize, maxPix);
 
     // 4. 添加图像并完成转换
     CGImageDestinationAddImage(destination, image, options);
@@ -96,6 +123,8 @@ static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef i
     }
 
     // 6. 释放资源
+    CFRelease(qualityNum);
+    CFRelease(maxPix);
     CFRelease(options);
     CFRelease(destination);
     CFRelease(data);
@@ -103,12 +132,8 @@ static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef i
     return true;
 }
 
+// TODO
 static void listDisplays() {
-    static bool listed = false;
-    if (listed)
-        return;
-
-    listed = true;
     std::cout << "Main Display ID: " << CGMainDisplayID() << std::endl;
     std::cout << "Direct Main: " << kCGDirectMainDisplay << std::endl;
     CGDirectDisplayID displays[32];
@@ -121,6 +146,23 @@ static void listDisplays() {
     }
 }
 
+std::pair<size_t, size_t> getScreenResolution() {
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
+
+    // real pixel size (maybe equals logical pix times 2)
+    // width = CGDisplayModeGetPixelWidth(mode);
+    // height = CGDisplayModeGetPixelHeight(mode);
+
+    // logical pixel size
+    size_t width = CGDisplayModeGetWidth(mode);
+    size_t height = CGDisplayModeGetHeight(mode);
+
+    // CGRect bounds = CGDisplayBounds(CGMainDisplayID());
+    // width = CGRectGetWidth(bounds);
+    // height = CGRectGetHeight(bounds);
+    return {width, height};
+}
+
 bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality) {
     // todo select display id
     CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
@@ -130,18 +172,37 @@ bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &heig
         height = 0;
         return false;
     }
-    listDisplays();
 
-    width = CGImageGetWidth(imgRef);
-    height = CGImageGetHeight(imgRef);
+    // width = CGImageGetWidth(imgRef);
+    // height = CGImageGetHeight(imgRef);
+    auto r = getScreenResolution();
+    width = r.first;
+    height = r.second;
 
-    bool ret = CGImageToJPEGData(jpeg, imgRef, quality);
+    bool ret = CGImageToJPEGData(jpeg, imgRef, width, quality);
     CGImageRelease(imgRef);
 
     return ret;
 }
 
-bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
+    if (!imgRef) {
+        width = 0;
+        height = 0;
+        return false;
+    }
+    auto r = getScreenResolution();
+    width = r.first;
+    height = r.second;
+    // width = CGImageGetWidth(imgRef);
+    // height = CGImageGetHeight(imgRef);
+    bool ret = CGImageToRGBAData(rgba, imgRef, width, height);
+    CGImageRelease(imgRef);
+    return ret;
+}
+
+bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height) {
     CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
     if (!imgRef)
         return false;
@@ -150,22 +211,11 @@ bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) 
     return ret;
 }
 
-std::pair<size_t, size_t> getScreenResolution() {
-    static size_t width = 0;
-    static size_t height = 0;
-    if (width == 0) {
-        CGDirectDisplayID main_display = CGMainDisplayID();
-        CGRect bounds = CGDisplayBounds(main_display);
-        width = CGRectGetWidth(bounds);
-        height = CGRectGetHeight(bounds);
-    }
-    return {width, height};
-}
-
 std::pair<size_t, size_t> getCursorLoc() {
     CGEventRef event = CGEventCreate(nullptr);
     CGPoint pos = CGEventGetLocation(event);
     CFRelease(event);
     return {pos.x, pos.y};
 }
+
 } // namespace impl

@@ -24,7 +24,7 @@ static void async_stop_cb(uv_async_t *handle) {
     server->stop([](uv_handle_t *handle) {
         std::this_thread::sleep_for(std::chrono::seconds(3));
         uv_stop(handle->loop);
-        LOG_INFO_STREAM << "HTTP Server stoped";
+        LOG_INFO_STREAM << "HTTP Server stopped";
     });
 }
 
@@ -38,11 +38,9 @@ static void stopWorker() {
 
 void worker() {
     // uv_loop_t* loop = uv_default_loop();
-    uv_loop_t *loop = uv_loop_new();
-    if (!loop) {
-        LOG_ERROR_STREAM << "Failed to create uv loop";
-        return;
-    }
+    uv_loop_t worker_loop;
+    uv_loop_t *loop = &worker_loop;
+    uv_loop_init(loop);
     uv_async_init(loop, &async_stop, async_stop_cb);
 
     LOG_INFO_STREAM << "DeskShare " APP_VERSION;
@@ -93,13 +91,26 @@ void worker() {
             LOG_ERROR_STREAM << "Failed to start server on port " << g_config.port;
             continue;
         }
+        pages::start();
 
         running = true;
 
         std::stringstream addrs;
-        for (const auto &[eth, ip] : utils::getIpAddress()) {
+        auto tmp = utils::getIpAddress();
+        addrs << "Running on ";
+        int cnt = 0;
+        for (const auto &[eth, ip] : tmp) {
             LOG_INFO_STREAM << ">> http://" << ip << ":" << g_config.port;
+            if (ip.compare(0, 8, "127.0.0.") == 0) {
+                continue;
+            }
             addrs << " http://" << ip << ":" << g_config.port << " ";
+            ++cnt;
+        }
+        if (cnt == 0) {
+            addrs << " http://"
+                  << "127.0.0.1"
+                  << ":" << g_config.port << " ";
         }
 
         gui.setInfo(addrs.str());
@@ -110,6 +121,7 @@ void worker() {
     }
 
     uv_close((uv_handle_t *)&async_stop, nullptr);
+    pages::exit();
     uv_loop_close(loop);
 }
 

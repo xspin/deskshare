@@ -62,6 +62,7 @@ class GUI {
     std::unique_ptr<Fl_Input> input_timeout;
     std::unique_ptr<Fl_Input> input_fps;
     std::unique_ptr<Fl_Choice> choice_quality;
+    std::unique_ptr<Fl_Choice> choice_encoder;
     std::unique_ptr<Fl_Output> output_status;
     std::unique_ptr<Fl_Button> button_start;
 

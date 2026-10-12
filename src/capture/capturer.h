@@ -21,9 +21,12 @@ class Capturer {
 
     static bool captureJpg(std::vector<unsigned char> &jpg, size_t &width, size_t &height,
                            float quality);
-    static bool captureRgba(std::vector<unsigned char> &rgba, size_t w, size_t h);
+    static bool captureRgba(std::vector<unsigned char> &rgba);
+    static bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
+    static bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height);
+    static bool captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
 
-    static void rgbaToGray(std::vector<unsigned char> &rgba, size_t w, size_t h);
+    static void rgbaToGray(std::vector<unsigned char> &rgba, size_t width, size_t height);
 
   private:
     Capturer() = default;

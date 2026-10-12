@@ -20,8 +20,7 @@ to_hex_header() {
     fi
     local fname=$(basename "$path")
     xxd -c 16 -i "$path" "include/$fname.h"
-} 
-
+}
 
 to_hex_header favicon.ico
 to_hex_header index.html
@@ -36,3 +35,6 @@ to_hex_header mjpeg.index.html
 
 terser mjpeg.js -o ${OUTPUT}/mjpeg.js -m -c
 to_hex_header ${OUTPUT}/mjpeg.js
+
+cp jmuxer@2.1.4/jmuxer.min.js ${OUTPUT}/jmuxer.js
+to_hex_header ${OUTPUT}/jmuxer.js

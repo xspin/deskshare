@@ -2,6 +2,7 @@
 #include "capture/capturer.h"
 #include "logger.h"
 #include "pages.h"
+#include "stream.hpp"
 #include "utils.h"
 #include <FL/Fl_Tooltip.H>
 #include <functional>
@@ -109,14 +110,15 @@ static void digitCheck(Fl_Widget *w, void *data) {
 
 void GUI::onTimeout(void *data) {
     GUI *self = static_cast<GUI *>(data);
+    auto &stream = Stream::instance();
+    auto [fps, Bps] = stream.stat();
+
     std::stringstream ss;
-    ss << " " << g_config.clients << " ☺  ";
-    ss << std::fixed << std::setprecision(1) << (g_config.frames / TIMEOUT_INTERVAL) << " fps  ";
-    ss << utils::speedString(g_config.bytes / TIMEOUT_INTERVAL);
+    ss << " " << stream.getReqs().size() << "☺ ";
+    ss << std::fixed << std::setprecision(1) << fps << " fps ";
+    ss << utils::speedString(Bps);
 
     self->output_status->value(ss.str().c_str());
-    g_config.frames = 0;
-    g_config.bytes = 0;
 
     Fl::repeat_timeout(TIMEOUT_INTERVAL, onTimeout, data);
 }
@@ -168,12 +170,14 @@ void GUI::onAbout(Fl_Widget *w, void *data) {
 void GUI::onDetail(Fl_Widget *w, void *data) {
     static std::string details;
     GUI *self = static_cast<GUI *>(data);
-    auto reqs = pages::getReqs();
+    Stream &s = Stream::instance();
+    auto reqs = s.getReqs();
 
     std::stringstream ss;
     ss << "\nRemote Clients:\n\n";
     auto now = std::time(nullptr);
-    for (const auto &[key, ts] : reqs) {
+    for (const auto &[key, info] : reqs) {
+        auto ts = std::get<1>(info);
         time_t d = now - ts;
         ss << "[" << utils::timeFmt(ts) << "]    " << key << "    ("
            << utils::gmTimeFmt(d, "%H:%M:%S") << ")\n";
@@ -197,7 +201,7 @@ void GUI::previewImpl(void *data) {
     Fl_Timestamp frame_start = Fl::now();
     auto &cap = Capturer::getInstance();
     auto [width, height] = self->img_size;
-    cap.captureRgba(self->pixel, width, height);
+    cap.captureRgbaScaled(self->pixel, width, height);
 
     if (!self->show_preview) {
         cap.rgbaToGray(self->pixel, width, height);
@@ -296,7 +300,7 @@ void GUI::init(std::function<void()> callback) {
     int w = 50;
     int h = 20;
 
-    int dx = w + 10;
+    int dx = 5;
     int dy = h + 10;
 
     auto p = std::make_unique<GuiWindow>(width, height, "DeskShare " APP_VERSION);
@@ -329,22 +333,24 @@ void GUI::init(std::function<void()> callback) {
     input_port->callback(digitCheck);
     input_port->labelcolor(DEFAULT_FONT_COLOR);
 
-    int timeout_x = port_x + dx;
+    int timeout_x = port_x + w + dx;
     input_timeout = std::make_unique<Fl_Input>(timeout_x, input_y, w, h, "Timeout");
     input_timeout->align(FL_ALIGN_TOP);
     input_timeout->value(g_config.timeout);
     input_timeout->callback(digitCheck);
     input_timeout->labelcolor(DEFAULT_FONT_COLOR);
 
-    int fps_x = timeout_x + dx;
-    input_fps = std::make_unique<Fl_Input>(fps_x, input_y, w, h, "FPS");
+    int fps_x = timeout_x + w + dx;
+    int fps_w = w - 20;
+    input_fps = std::make_unique<Fl_Input>(fps_x, input_y, fps_w, h, "FPS");
     input_fps->align(FL_ALIGN_TOP);
     input_fps->value(g_config.fps);
     input_fps->callback(digitCheck, (void *)"FPS");
     input_fps->labelcolor(DEFAULT_FONT_COLOR);
 
-    int quality_x = fps_x + dx;
-    choice_quality = std::make_unique<Fl_Choice>(quality_x, input_y, w + 8, h, "Quality");
+    int quality_x = fps_x + fps_w + dx;
+    int quality_w = w + 8;
+    choice_quality = std::make_unique<Fl_Choice>(quality_x, input_y, quality_w, h, "Quality");
     choice_quality->align(FL_ALIGN_TOP);
     for (int i = 1; i <= 10; ++i) {
         std::string label = std::to_string(i * 10) + "%";
@@ -354,14 +360,31 @@ void GUI::init(std::function<void()> callback) {
     choice_quality->callback([](Fl_Widget *w, void *data) {
         Fl_Choice *choice = (Fl_Choice *)w;
         g_config.quality = (choice->value() + 1) / 10.0f;
-        pages::setup();
         LOG_INFO_STREAM << "Update quality: " << g_config.quality;
+        pages::setup();
     });
     choice_quality->labelcolor(DEFAULT_FONT_COLOR);
     choice_quality->color(DEFAULT_BG_COLOR);
 
-    int status_x = quality_x + dx + 10;
-    int status_w = w * 3 + 15;
+    int enc_x = quality_x + quality_w + dx;
+    int enc_w = w + 5;
+    choice_encoder = std::make_unique<Fl_Choice>(enc_x, input_y, enc_w, h, "Encoder");
+    choice_encoder->align(FL_ALIGN_TOP);
+    choice_encoder->add("MJPEG");
+    choice_encoder->add("H.264");
+    choice_encoder->value(g_config.h264 ? 1 : 0);
+    choice_encoder->callback([](Fl_Widget *w, void *data) {
+        Fl_Choice *choice = (Fl_Choice *)w;
+        int i = choice->value();
+        g_config.h264 = i == 1;
+        LOG_INFO_STREAM << "Update encoder: " << (g_config.h264 ? "H.264" : "MJPEG");
+        pages::setup();
+    });
+    choice_encoder->labelcolor(DEFAULT_FONT_COLOR);
+    choice_encoder->color(DEFAULT_BG_COLOR);
+
+    int status_x = enc_x + enc_w + dx;
+    int status_w = 150;
     output_status = std::make_unique<Fl_Output>(status_x, input_y, status_w, h);
     output_status->align(FL_ALIGN_CENTER);
     output_status->value("");
@@ -373,7 +396,7 @@ void GUI::init(std::function<void()> callback) {
 
     Fl::add_timeout(TIMEOUT_INTERVAL, onTimeout, this);
 
-    int start_x = status_x + status_w + 10;
+    int start_x = status_x + status_w + dx;
     button_start = std::make_unique<Fl_Button>(start_x, input_y - 5, w, h + 10, "Start");
     button_start->color(DEFAULT_BG_COLOR);
     button_start->labelsize(28);
@@ -469,6 +492,8 @@ void GUI::activate() {
     button_start->activate();
     button_start->labelcolor(FL_DARK_GREEN);
     info->value("Not Running!");
+    info->redraw();
+    Fl::flush();
 }
 
 void GUI::deactivate() {
@@ -481,6 +506,8 @@ void GUI::deactivate() {
 
 void GUI::setInfo(const std::string &label) {
     info->value(label.c_str());
+    info->redraw();
+    Fl::flush();
 }
 
 void GUI::output(const char *s, size_t n) {

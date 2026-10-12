@@ -4,10 +4,9 @@
 
 namespace pages {
 
-void init(uv_loop_t* loop, HttpServer& server);
+void init(uv_loop_t *loop, HttpServer &server);
 void setup();
 void stop();
-std::unordered_map<std::string, time_t> getReqs();
-
-}
-
+void start();
+void exit();
+} // namespace pages

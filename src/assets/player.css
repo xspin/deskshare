@@ -1,6 +1,7 @@
-body {
+html, body {
     position: absolute;
     margin: 0;
+    padding: 0;
     background-color: black;
     width: 100%;
     height: 100%;
@@ -40,7 +41,7 @@ div#info {
     right: 60px;
     text-align: right;
     width: auto;
-    z-index: 10;
+    z-index: 20;
 }
 
 div#info a {
@@ -57,7 +58,7 @@ div#details {
     position: absolute;
     top: 35px;
     right: 60px;
-    z-index: 10;
+    z-index: 20;
     font-size: 12px;
     background-color: black;
     opacity: 0.8;
@@ -98,7 +99,7 @@ div#details li::before {
     right: 20px;
     width: 30px;
     height: 25px;
-    z-index: 20;
+    z-index: 30;
     display: flex;
     border-radius: 20%;
     justify-content: center;
@@ -149,14 +150,19 @@ div#details li::before {
 }
 
 #play-container {
+    position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
+    left:0;
+    top:0;
     width: 100%;
     height: 100%;
     background-color: black;
     opacity: 0.5;
     z-index: 100;
+    margin: 0;
+    padding: 0;
 }
 #play-container svg:hover {
     transform: scale(1.1);
@@ -165,4 +171,33 @@ div#details li::before {
 .hidden {
     visibility: hidden;
     display: none;
+}
+
+#player-container {
+  position: absolute;
+  background-color:black;
+  width: 100%;
+  height: 100%;
+  top: 0; left: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#video, #overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#video {
+    z-index: 11;
+}
+#overlay {
+    z-index: 12;
+    background: transparent;
 }

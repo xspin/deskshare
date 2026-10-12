@@ -50,8 +50,7 @@ static HBITMAP captureScreenToBitmap(size_t &width, size_t &height) {
     return hBitmap;
 }
 
-static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap, size_t &width,
-                          size_t &height) {
+static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap) {
     if (!hBitmap)
         return false;
 
@@ -60,8 +59,8 @@ static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap, siz
     if (!GetObject(hBitmap, sizeof(BITMAP), &bm))
         return false;
 
-    width = bm.bmWidth;
-    height = bm.bmHeight;
+    size_t width = bm.bmWidth;
+    size_t height = bm.bmHeight;
 
     // 2. 创建兼容 DC 并选入位图
     HDC hdc = GetDC(nullptr);
@@ -203,7 +202,7 @@ static void scaleRGBA_Nearest(const unsigned char *src, int srcW, int srcH, unsi
             dst[di] = src[si];
             dst[di + 1] = src[si + 1];
             dst[di + 2] = src[si + 2];
-            dst[di + 3] = src[si + 3]; // Alpha
+            dst[di + 3] = src[si + 3]; // Alpha is ignored
         }
     }
 }
@@ -237,25 +236,30 @@ static void scaleRGBA_Bilinear(const unsigned char *src, int srcW, int srcH, uns
     }
 }
 
-bool captureRgba(std::vector<unsigned char> &rgba, size_t width, size_t height) {
-    static std::vector<unsigned char> buf;
-
-    size_t w, h;
-    HBITMAP hBitmap = captureScreenToBitmap(w, h);
+bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    HBITMAP hBitmap = captureScreenToBitmap(width, height);
     if (!hBitmap) {
         return false;
     }
 
-    bool ret = HBITMAPToRGBA(buf, hBitmap, w, h);
+    bool ret = HBITMAPToRGBA(rgba, hBitmap);
     DeleteObject(hBitmap);
-    if (!ret)
+    return ret;
+}
+
+bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height) {
+    static std::vector<unsigned char> buf;
+
+    size_t w, h;
+    if (!captureRgba(buf, w, h)) {
         return false;
+    }
 
     rgba.resize(width * height * 4);
+
     // scaleRGBA_Bilinear(buf.data(), w, h, rgba.data(), width, height);
     scaleRGBA_Nearest(buf.data(), w, h, rgba.data(), width, height);
-
-    return ret;
+    return true;
 }
 
 std::pair<size_t, size_t> getScreenResolution() {

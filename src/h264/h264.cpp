@@ -1,113 +1,151 @@
-#include <iostream>
-
 #include "h264.hpp"
+#include <cassert>
+#include <iostream>
+#include <libyuv.h>
 
-extern "C" {
-#include <libavutil/opt.h>
-}
-
-H264Encoder::H264Encoder() {
+H264Encoder::H264Encoder() : encoder_(nullptr) {
+    memset(&pic_in_, 0, sizeof(pic_in_));
 }
 
 H264Encoder::~H264Encoder() {
-    sws_freeContext(sws_ctx_);
-    avcodec_free_context(&codec_ctx_);
-    av_packet_free(&pkt_);
-    av_frame_free(&frame_);
+    release();
 }
 
-bool H264Encoder::init(size_t width, size_t height, int fps) {
-    assert(width > 0 && height > 0 && fps > 0);
+void H264Encoder::release() {
+    if (pic_in_.img.plane[0]) {
+        x264_picture_clean(&pic_in_);
+        memset(&pic_in_, 0, sizeof(pic_in_));
+    }
+    if (encoder_) {
+        x264_encoder_close(encoder_);
+        encoder_ = nullptr;
+    }
+}
 
-    this->width_ = width;
-    this->height_ = height;
-    this->idx_ = 0;
-
-    sws_ctx_ = sws_getContext(width, height, AV_PIX_FMT_RGBA,    // 输入：RGBA
-                              width, height, AV_PIX_FMT_YUV420P, // 输出：YUV420P
-                              SWS_BILINEAR, nullptr, nullptr, nullptr);
-    if (!sws_ctx_) {
-        std::cerr << "sws_getContext failed" << std::endl;
+bool H264Encoder::init(size_t width, size_t height, float quality, int fps) {
+    x264_param_t param;
+    if (x264_param_default_preset(&param, "ultrafast", "zerolatency")) {
+        std::cerr << "Failed to preset x264 param\n";
         return false;
     }
 
-    const AVCodec *codec = avcodec_find_encoder_by_name("libx264");
-    if (!codec) {
-        std::cerr << "find_encoder of libx264 failed" << std::endl;
-        return false;
-    }
-    codec_ctx_ = avcodec_alloc_context3(codec);
-    if (!codec_ctx_) {
-        std::cerr << "avcodec_alloc_context3 failed" << std::endl;
-        return false;
-    }
+    assert(quality >= 0 && quality <= 1);
 
-    codec_ctx_->width = width;
-    codec_ctx_->height = height;
-    codec_ctx_->time_base = (AVRational){1, fps};
-    codec_ctx_->framerate = (AVRational){fps, 1};
-    codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
-    codec_ctx_->gop_size = 30;
-    codec_ctx_->bit_rate = 400000;
+    // 视觉无损 / 存档	17 - 18	与原始画面几乎无差别，文件较大 (0.64~0.66)
+    // 高质量分发 (推荐)	20 - 23	画质优秀，文件大小合理，适合大多数场景 (0.54~0.6)
+    // 平衡画质与体积	24 - 28	画质可接受，文件明显减小，适合网络传输 (0.44~0.52)
+    // 低质量 / 预览	30+	画质损失明显，仅用于快速预览 (~0.4)
+    // 0~51  default:23   quality: 0~1
 
-    // 视觉无损 / 存档	17 - 18	与原始画面几乎无差别，文件较大
-    // 高质量分发 (推荐)	20 - 23	画质优秀，文件大小合理，适合大多数场景
-    // 平衡画质与体积	24 - 28	画质可接受，文件明显减小，适合网络传输
-    // 低质量 / 预览	30+	画质损失明显，仅用于快速预览
-    if (av_opt_set(codec_ctx_->priv_data, "crf", "23", 0)) {
-        std::cerr << "av_opt_set crf failed" << std::endl;
-        return false;
-    }
+    float crf = (1 - quality) * 50;
+    param.rc.f_rf_constant = crf < 1 ? 1 : crf;
+    param.rc.i_rc_method = X264_RC_CRF;
 
-    if (av_opt_set(codec_ctx_->priv_data, "preset", "medium", 0)) {
-        std::cerr << "av_opt_set preset failed" << std::endl;
-        return false;
-    }
+    // 设置 VBV 限制，防止码率失控
+    param.rc.i_vbv_max_bitrate = 21000; // 你允许的最大瞬时码率（kbps），根据网络带宽设定
+    param.rc.i_vbv_buffer_size = 21000; // 缓冲区大小，通常设为与 max_bitrate 相等或略大
 
-    if (avcodec_open2(codec_ctx_, codec, nullptr)) {
-        std::cerr << "avcodec_open2 failed" << std::endl;
-        return false;
-    }
+    param.i_bframe = 0;
+    param.i_threads = 1;
+    param.i_scenecut_threshold = 0;
+    param.i_width = width;
+    param.i_height = height;
+    param.b_annexb = 1;         // 输出 Annex B 格式的起始码，方便流式传输
+    param.b_repeat_headers = 1; // 关键帧前重复 SPS/PPS，确保接收端能随时解码
+    param.i_keyint_max = fps;   // 通常设为帧率的 1-2 倍
+    param.i_keyint_min = fps;
+    param.i_fps_num = fps;
+    param.i_fps_den = 1;
 
-    pkt_ = av_packet_alloc();
-    if (!pkt_) {
-        std::cerr << "av_packet_alloc failed" << std::endl;
+    // param.b_vfr_input = 1;
+    // param.i_timebase_num = 1;
+    // param.i_timebase_den = 1000;
+
+    if (x264_param_apply_profile(&param, "baseline")) {
+        std::cerr << "Failed to apply x264 profile\n";
         return false;
     }
 
-    frame_ = av_frame_alloc();
-    if (!frame_) {
-        std::cerr << "av_frame_alloc failed" << std::endl;
+    release();
+
+    encoder_ = x264_encoder_open(&param);
+    if (!encoder_) {
+        std::cerr << "Failed to open x264 encoder\n";
         return false;
     }
-    frame_->format = AV_PIX_FMT_YUV420P;
-    frame_->width = width;
-    frame_->height = height;
-    av_frame_get_buffer(frame_, 32);
 
+    if (x264_picture_alloc(&pic_in_, X264_CSP_I420, width, height)) {
+        std::cerr << "Failed to alloc x264 picture\n";
+        return false;
+    }
+
+    width_ = width;
+    height_ = height;
+    i420_buffer_.resize(width * height * 3 / 2);
+    // frame_idx_ = 0;
+
+    // start_time_ = std::chrono::steady_clock::now();
     return true;
 }
 
-void H264Encoder::encode(uint8_t *rgba, bool key_frame) {
-    const uint8_t *src_data[1] = {rgba}; // RGBA 是单平面交错
-    int src_linesize[1] = {(int)width_ * 4};
+bool H264Encoder::rgbaToI420(const std::vector<uint8_t> &rgba) {
+    // 计算各 plane 的指针
+    size_t width = width_;
+    size_t height = height_;
+    uint8_t *y_plane = i420_buffer_.data();
+    uint8_t *u_plane = y_plane + width * height;
+    uint8_t *v_plane = u_plane + width * height / 4;
+
+    // I420 各 plane 的 stride = 对应宽度
+    size_t stride = (width + 1) / 2;
+    int ret = libyuv::ABGRToI420(rgba.data(), width * 4, // src, src_stride
+                                 y_plane, width,         // dst_y, dst_stride_y
+                                 u_plane, stride,        // dst_u, dst_stride_u
+                                 v_plane, stride,        // dst_v, dst_stride_v
+                                 width, height           // width, height
+    );
+
+    if (ret) {
+        std::cerr << "Failed to ABGRToI420\n";
+        return false;
+    }
+    // -------- 填充 x264 输入图像 --------
+    // 将 libyuv 转换结果拷贝到 x264 的 picture 结构中
+    // 注意：实际生产代码可直接操作 pic_in.img.plane 避免额外拷贝
+    memcpy(pic_in_.img.plane[0], y_plane, width * height);
+    memcpy(pic_in_.img.plane[1], u_plane, width * height / 4);
+    memcpy(pic_in_.img.plane[2], v_plane, width * height / 4);
+    return true;
+}
+
+std::pair<int, bool> H264Encoder::encode(const std::vector<uint8_t> &rgba, bool key_frame,
+                                         bool flush) {
+    if (!rgbaToI420(rgba))
+        return {-1, false};
+
+    // auto now = std::chrono::steady_clock::now();
+    // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now -
+    // start_time_).count(); pic_in_.i_pts = elapsed;
+
+    x264_picture_t pic_out;
+    x264_nal_t *nals = nullptr;
+    int i_nals = 0;
+    int frame_size;
 
     if (key_frame) {
-        frame_->pict_type = AV_PICTURE_TYPE_I;
-        frame_->flags |= AV_FRAME_FLAG_KEY;
+        pic_in_.i_type = X264_TYPE_IDR; // 强制为 IDR 帧，确保后续帧不参考此帧之前的数据
     } else {
-        frame_->pict_type = AV_PICTURE_TYPE_NONE;
-        frame_->flags &= ~AV_FRAME_FLAG_KEY;
+        pic_in_.i_type = X264_TYPE_AUTO; // 恢复自动决策
     }
 
-    // rgba to YUV420P frame
-    sws_scale(sws_ctx_, src_data, src_linesize, 0, height_, frame_->data, frame_->linesize);
+    auto p = flush ? nullptr : &pic_in_;
 
-    frame_->pts = idx_++;
-    avcodec_send_frame(codec_ctx_, frame_);
-
-    while (avcodec_receive_packet(codec_ctx_, pkt_) >= 0) {
-        pktHandle_(pkt_->data, pkt_->size);
-        av_packet_unref(pkt_);
+    bool kf = false;
+    if ((frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, p, &pic_out)) > 0) {
+        kf = pic_out.b_keyframe != 0;
+        for (int i = 0; i < i_nals; i++) {
+            pktHandle_(nals[i].p_payload, nals[i].i_payload);
+        }
     }
+    return {frame_size, kf};
 }

@@ -12,15 +12,21 @@ TEST(cpature, Capturer) {
     EXPECT_LT(y, h);
 
     size_t width, height;
+
     std::vector<unsigned char> jpg;
     Capturer &cap = Capturer::getInstance();
     cap.captureJpg(jpg, width, height, 0.01);
     EXPECT_GT(jpg.size(), 0);
-    EXPECT_GT(width, 0);
-    EXPECT_GT(height, 0);
+    EXPECT_EQ(width, w);
+    EXPECT_EQ(height, h);
 
     cap.captureJpg(jpg, width, height, 1);
     EXPECT_GT(jpg.size(), 0);
-    EXPECT_GT(width, 0);
-    EXPECT_GT(height, 0);
+    EXPECT_EQ(width, w);
+    EXPECT_EQ(height, h);
+
+    std::vector<unsigned char> rgba;
+    cap.captureRgba(jpg, width, height);
+    EXPECT_EQ(width, w);
+    EXPECT_EQ(height, h);
 }

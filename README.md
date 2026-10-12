@@ -4,11 +4,13 @@ DeskShare is a desktop sharing tool that can be accessed via a web browser.
 
 [More in GitHub](https://github.com/xspin/deskshare)
 
-## Requirements
-- CMake
-- libuv
-- FLTK
-- OpenSSL
+## Dependencies
+- [libuv](https://github.com/libuv/libuv)
+- [FLTK](https://github.com/fltk/fltk)
+- [OpenSSL](https://github.com/openssl/openssl)
+- [JMuxer](https://github.com/webstream-labs/jmuxer)
+- [libx264](https://www.videolan.org/developers/x264.html)
+- [libyuv](https://chromium.googlesource.com/libyuv/libyuv)
 
 ## Building
 

@@ -36,6 +36,13 @@ bool Capturer::captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width,
     return impl::captureRgbaScaled(rgba, width, height);
 }
 
+bool Capturer::captureRgbaEven(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    auto [w, h] = impl::getScreenResolution();
+    width = w - (w & 1);
+    height = h - (h & 1);
+    return impl::captureRgbaScaled(rgba, width, height);
+}
+
 bool Capturer::captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
     static int frame_idx = 0;
     auto r = impl::getScreenResolution();
@@ -43,9 +50,9 @@ bool Capturer::captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, 
     height = r.second;
     rgba.resize(width * height * 4);
 
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int idx = (y * width + x) * 3;
+    for (size_t y = 0; y < height; y++) {
+        for (size_t x = 0; x < width; x++) {
+            size_t idx = (y * width + x) * 3;
             rgba[idx] = (x + frame_idx) % 256;     // R
             rgba[idx + 1] = (y + frame_idx) % 256; // G
             rgba[idx + 2] = (x + y) % 256;         // B

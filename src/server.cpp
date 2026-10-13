@@ -3,6 +3,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 #include "logger.h"
@@ -199,12 +200,6 @@ void Response::init() {
         headers["Content-Length"] = std::to_string(body.size());
     }
     // headers["Connection"] = "Close";
-    request = nullptr;
-    repeat = false;
-    delay = 0;
-    delay_timer = nullptr;
-    client_id = 0;
-    loop = nullptr;
 }
 
 Response::~Response() {
@@ -320,6 +315,14 @@ void Response::setClientId(size_t id) {
 
 size_t Response::getClientId() {
     return client_id;
+}
+
+void Response::setRequest(std::unique_ptr<http_request> req) {
+    request = std::move(req);
+}
+
+const http_request *Response::getRequest() {
+    return request.get();
 }
 
 std::string Response::str() const {
@@ -549,7 +552,7 @@ void HttpServer::stop(uv_close_cb cb) {
 void HttpServer::addRoute(const std::string &method, const std::string &path,
                           const Response &response) {
     std::string p = clearSlash(path);
-    routes[method][p] = response;
+    routes[method][p] = std::move(response);
     if (routes[method][p].getContentType().empty()) {
         routes[method][p].setContentType(utils::getMimeType(p));
     }
@@ -558,7 +561,7 @@ void HttpServer::addRoute(const std::string &method, const std::string &path,
 
 void HttpServer::addWsRoute(const std::string &path, const WsResponse &response) {
     std::string p = clearSlash(path);
-    ws_routes[p] = response;
+    ws_routes[p] = std::move(response);
     LOG_DEBUG_STREAM << "Added ws route: "
                      << " " << p;
 }
@@ -752,21 +755,28 @@ void HttpServer::on_close(uv_handle_t *handle) {
     }
 }
 
-Response *HttpServer::newResponse(const std::string &method, const std::string &url) {
+Response *HttpServer::newResponse(std::unique_ptr<http_request> req) {
+    const std::string &method = req->method;
+    const std::string &url = req->url;
     auto method_iter = routes.find(method);
     if (method_iter != routes.end()) {
         auto handler_iter = method_iter->second.find(clearSlash(url));
         if (handler_iter != method_iter->second.end()) {
-            return new Response(handler_iter->second);
+            auto p = new Response(handler_iter->second);
+            p->setRequest(std::move(req));
+            return p;
         }
     }
     return nullptr;
 }
 
-WsResponse *HttpServer::newWsResponse(const std::string &url) {
+WsResponse *HttpServer::newWsResponse(std::unique_ptr<http_request> req) {
+    const std::string &url = req->url;
     auto handler_iter = ws_routes.find(clearSlash(url));
     if (handler_iter != ws_routes.end()) {
-        return new WsResponse(handler_iter->second);
+        auto p = new WsResponse(handler_iter->second);
+        p->setRequest(std::move(req));
+        return p;
     }
     return nullptr;
 }
@@ -804,28 +814,29 @@ static void sendWsClose(uv_stream_t *client, WsErrorCode code, const std::string
 void HttpServer::handleWsRequest(uv_stream_t *client, const std::string &request_data) {
     client_context *ctx = static_cast<client_context *>(client->data);
 
-    http_request req;
+    auto req = std::make_unique<http_request>();
     if (!ctx->ws_req) {
-        if (!parseHttpRequest(request_data, req)) {
+        if (!parseHttpRequest(request_data, *req.get())) {
             LOG_WARNING_STREAM << "Failed to parse HTTP request " << ctx;
             // sendErrorResponse(client, HttpStatus::BAD_REQUEST);
             sendWsClose(client, WsErrorCode::PROTOCOL_ERROR);
             return;
         }
 
-        LOG_INFO_STREAM << "WS Request: " << req.method << " " << req.url << " " << client->data;
+        LOG_INFO_STREAM << "WS Request: " << req->method << " " << req->url << " " << client->data;
         LOG_DEBUG_STREAM << "\n" << request_data;
 
-        if (req.method != "GET") {
+        if (req->method != "GET") {
             sendWsClose(client, WsErrorCode::PROTOCOL_ERROR);
             return;
         }
 
-        auto it = req.headers.find("Sec-WebSocket-Key");
-        if (it != req.headers.end()) {
-            WsResponse *resp = newWsResponse(req.url);
+        auto it = req->headers.find("Sec-WebSocket-Key");
+        if (it != req->headers.end()) {
+            std::string url = req->url;
+            WsResponse *resp = newWsResponse(std::move(req));
             if (!resp) {
-                LOG_WARNING_STREAM << "route not found for " << req.url << " " << ctx;
+                LOG_WARNING_STREAM << "route not found for " << url << " " << ctx;
                 sendWsClose(client, WsErrorCode::RESOURCE_NOT_FOUND);
                 return;
             }
@@ -869,23 +880,25 @@ void HttpServer::handleWsRequest(uv_stream_t *client, const std::string &request
 
 // 处理 HTTP 请求
 void HttpServer::handleHttpRequest(uv_stream_t *client, const std::string &request_data) {
-    http_request req;
+    auto req = std::make_unique<http_request>();
 
     // 解析 HTTP 请求
-    if (!parseHttpRequest(request_data, req)) {
+    if (!parseHttpRequest(request_data, *req.get())) {
         LOG_WARNING_STREAM << "Failed to parse HTTP request";
         sendErrorResponse(client, HttpStatus::BAD_REQUEST);
         return;
     }
 
-    LOG_DEBUG_STREAM << client->data << " Request: " << req.method << " " << req.url;
+    std::string method = req->method;
+    std::string url = req->method;
+    LOG_DEBUG_STREAM << client->data << " Request: " << method << " " << url;
     LOG_DEBUG_STREAM << "\n" << request_data;
 
-    auto response = newResponse(req.method, req.url);
+    auto response = newResponse(std::move(req));
     if (response) {
         sendHttpResponse(client, response);
     } else {
-        LOG_WARNING_STREAM << client->data << " " << req.method << " " << req.url << " Not Found";
+        LOG_WARNING_STREAM << client->data << " " << method << " " << url << " Not Found";
         sendErrorResponse(client, HttpStatus::NOT_FOUND);
     }
 }

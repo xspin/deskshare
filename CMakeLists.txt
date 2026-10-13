@@ -46,6 +46,14 @@ if (WIN32)
     set(FLTK_LIB_DIR "${FLTK_ROOT_DIR}/build/lib")
     set(FLTK_INCLUDE_DIR "${FLTK_ROOT_DIR}")
 
+    set(X264_ROOT_DIR "C:/x264-master")
+    set(X264_LIB_DIR ${X264_ROOT_DIR}/build/lib)
+    set(X264_INCLUDE_DIR ${X264_ROOT_DIR}/build/include)
+
+    set(YUV_ROOT_DIR "C:/libyuv-main")
+    set(YUV_LIB_DIR ${YUV_ROOT_DIR}/build)
+    set(YUV_INCLUDE_DIR ${YUV_ROOT_DIR}/include)
+
 elseif (DARWIN)
     set(LIBUV_ROOT_DIR "/usr/local/opt/libuv")
     set(LIBUV_LIB_DIR "${LIBUV_ROOT_DIR}/lib")
@@ -58,12 +66,13 @@ elseif (DARWIN)
     set(FLTK_INCLUDE_DIR "${FLTK_ROOT_DIR}/include")
 
     set(X264_LIB_DIR "/usr/local/opt/x264/lib")
-    set(LOCAL_LIB_DIR "/usr/local/lib")
+    set(YUV_LIB_DIR "/usr/local/lib")
 endif()
 
 include_directories(${LIBUV_ROOT_DIR}/include)
 include_directories(${OPENSSL_ROOT_DIR}/include)
 include_directories(${FLTK_INCLUDE_DIR})
+include_directories(${X264_INCLUDE_DIR} ${YUV_INCLUDE_DIR})
 
 find_library(LIBUV
     NAMES libuv.a libuv.lib
@@ -82,7 +91,7 @@ find_library(LIBX264
 
 find_library(LIBYUV
     NAMES libyuv.a
-    PATHS ${LOCAL_LIB_DIR}
+    PATHS ${YUV_LIB_DIR}
 )
 
 if (ENABLE_GUI)

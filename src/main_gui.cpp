@@ -6,6 +6,7 @@
 #include "utils.h"
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -72,8 +73,7 @@ void worker() {
     while (!terminal) {
         running = false;
 
-        gui.activate();
-        Fl::awake();
+        Fl::awake([](void *) { gui.activate(); }, nullptr);
 
         mtx.lock(); // waiting for start
 
@@ -84,8 +84,7 @@ void worker() {
         server.setTimeout(g_config.timeout,
                           [](uv_timer_t *handle, HttpServer *self) { uv_async_send(&async_stop); });
 
-        gui.deactivate();
-        Fl::awake();
+        Fl::awake([](void *) { gui.deactivate(); }, nullptr);
 
         if (!server.start("0.0.0.0", g_config.port)) {
             LOG_ERROR_STREAM << "Failed to start server on port " << g_config.port;
@@ -113,8 +112,12 @@ void worker() {
                   << ":" << g_config.port << " ";
         }
 
-        gui.setInfo(addrs.str());
-        Fl::awake();
+        Fl::awake(
+            [](void *data) {
+                std::stringstream *ss = static_cast<std::stringstream *>(data);
+                gui.setInfo(ss->str());
+            },
+            &addrs);
 
         uv_run(loop, UV_RUN_DEFAULT);
         running = false;
@@ -129,6 +132,8 @@ int main(int argc, char *argv[]) {
     if (utils::parse_args(g_config, argc, argv)) {
         return -1;
     }
+
+    Fl::lock(); //初始化线程支持
 
     gui.init([]() {
         if (!running) {

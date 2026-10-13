@@ -14,7 +14,7 @@ class WsPlayer {
 
         this.frameCount = 0;
         this.fps = 0;
-        this.delayTimestamp = new Date().getTime();
+        this.delayTimestamp = new Date().getTime(); // ms
         this.delay = 0;
         this.bytes = 0;
         this.speed = 0;
@@ -25,6 +25,7 @@ class WsPlayer {
         this.ish264 = false;
         this.frame_width = 0;
         this.frame_height = 0;
+        this.lastFrameTime = null;
 
         this.setupCanvas();
         this.setupCursor();
@@ -41,6 +42,7 @@ class WsPlayer {
             node: this.video,
             mode: 'video',
             flushingTime: 0,
+            // fps: 20,
             // debug: true,
             onError: function(err) {
                 console.error('JMuxer error:', err);
@@ -66,7 +68,7 @@ class WsPlayer {
     }
 
     enableJpegDecoder() {
-        console.log("Enable Jpeg decoder");
+        console.log("Enable JPEG decoder");
         this.ish264 = false;
     }
 
@@ -92,8 +94,13 @@ class WsPlayer {
             return;
         }
 
+        // const now = performance.now();
+        // const duration = this.lastFrameTime === null ? 100 : now - this.lastFrameTime;
+        // this.lastFrameTime = now;
         // console.log(this.ws.binaryType, data.byteLength, data.size, data.length);
-        this.jmuxer.feed({ video: frame, isLastVideoFrameComplete: true, });
+        this.jmuxer.feed({ video: frame, isLastVideoFrameComplete: true });
+
+        // draw cursor
         this.drawFrame(null, this.frame_width, this.frame_height);
 
         // this.h264decoder.decode(new EncodedVideoChunk({
@@ -116,6 +123,7 @@ class WsPlayer {
     }
 
     stopPlaying() {
+        this.lastFrameTime = null;
         this.isPlaying = false;
         if (this.onStop) this.onStop();
     }
@@ -164,7 +172,6 @@ class WsPlayer {
                 this.debug('Received text:', event.data);
                 try {
                     if (event.data === this.pong) {
-                        this.delay = this.smooth(this.delay, (new Date().getTime() - this.delayTimestamp));
                         this.debug('Received PONG', 'delay:', this.delay, 'ms');
                         return;
                     }
@@ -188,6 +195,9 @@ class WsPlayer {
                     console.log(err);
                     console.log(event.data);
                 }
+                const t = new Date().getTime();
+                this.delay = this.smooth(this.delay, (t - this.delayTimestamp));
+                this.delayTimestamp = t;
             } else if (event.data instanceof ArrayBuffer) {
                 if (this.ish264) {
                     this.feedH264Frame(event.data);
@@ -277,7 +287,6 @@ class WsPlayer {
             return false;
         }
 
-        this.delayTimestamp = new Date().getTime();
         try {
             if (this.ws.readyState !== WebSocket.OPEN) {
                 console.warn("WS not ready:", this.ws.readyState);

@@ -245,12 +245,12 @@ void GUI::previewOn() {
     }
     show_preview = true;
 
-    auto [imgW, imgH] = Capturer::getInstance().getResolution();
+    auto [img_w, img_h] = Capturer::getInstance().getResolution();
     auto preview_w = self->preview->w();
     auto preview_h = self->preview->h();
 
-    double scale = std::min((double)preview_w / imgW, (double)preview_h / imgH);
-    self->img_size = {(size_t)(imgW * scale), (size_t)(imgH * scale)};
+    double scale = std::min((double)preview_w / img_w, (double)preview_h / img_h);
+    self->img_size = {(size_t)(img_w * scale), (size_t)(img_h * scale)};
 
     LOG_DEBUG_STREAM << "Start preview"
                      << ", size: " << preview_w << "x" << preview_h << ", Scale: " << scale;
@@ -397,7 +397,7 @@ void GUI::init(std::function<void()> callback) {
     Fl::add_timeout(TIMEOUT_INTERVAL, onTimeout, this);
 
     int start_x = status_x + status_w + dx;
-    button_start = std::make_unique<Fl_Button>(start_x, input_y - 5, w, h + 10, "Start");
+    button_start = std::make_unique<Fl_Button>(start_x, input_y - 5, w, h + 10, "?");
     button_start->color(DEFAULT_BG_COLOR);
     button_start->labelsize(28);
     button_start->labelfont(FL_BOLD);
@@ -486,17 +486,19 @@ void GUI::init(std::function<void()> callback) {
 }
 
 void GUI::activate() {
+    LOG_DEBUG_STREAM << "GUI activate";
     input_port->activate();
     input_timeout->activate();
     button_start->label("▶");
     button_start->activate();
     button_start->labelcolor(FL_DARK_GREEN);
     info->value("Not Running!");
-    info->redraw();
-    Fl::flush();
+    // info->redraw();
+    // Fl::flush();
 }
 
 void GUI::deactivate() {
+    LOG_DEBUG_STREAM << "GUI detivate";
     input_port->deactivate();
     input_timeout->deactivate();
     button_start->label("▣");
@@ -506,8 +508,8 @@ void GUI::deactivate() {
 
 void GUI::setInfo(const std::string &label) {
     info->value(label.c_str());
-    info->redraw();
-    Fl::flush();
+    // info->redraw();
+    // Fl::flush();
 }
 
 void GUI::output(const char *s, size_t n) {

@@ -25,6 +25,7 @@ class Capturer {
     static bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
     static bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height);
     static bool captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
+    static bool captureRgbaEven(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
 
     static void rgbaToGray(std::vector<unsigned char> &rgba, size_t width, size_t height);
 

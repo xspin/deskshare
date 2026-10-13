@@ -42,6 +42,7 @@ div#info {
     text-align: right;
     width: auto;
     z-index: 20;
+    border-radius: 3px;
 }
 
 div#info a {

@@ -111,7 +111,8 @@ static void initStreamRoutes(HttpServer &server) {
             //     self->setDelayOnce(d);
             //     return;
             // }
-            auto [frame, size] = s_stream.getFrame();
+            // auto [frame, size] = s_stream.getFrame();
+            auto [frame, size] = s_stream.capJpegFrame();
 
             body << "--jpegframe\r\n"
                  << "Content-Type: image/jpeg\r\n"
@@ -120,6 +121,7 @@ static void initStreamRoutes(HttpServer &server) {
             body.write((char *)frame, size);
             body << "\r\n";
             // self->markRepeat();
+            s_timeoutQueue.refresh(self->getClientId());
         },
         "multipart/x-mixed-replace; boundary=jpegframe", HttpStatus::OK,
         {{"Cache-Control", "no-cache"},
@@ -154,10 +156,11 @@ static void initStreamRoutes(HttpServer &server) {
             size_t cid = self->getClientId();
             std::string data = self->getWsFrame();
             // keepalive
-            LOG_DEBUG_STREAM << "keepalive: " << data;
+            LOG_DEBUG_STREAM << "id-" << cid << " keepalive: " << data;
             s_timeoutQueue.refresh(cid);
             // self->unsetWsFrame();
             os << WsClient::pack_text_frame("PONG");
+            LOG_DEBUG_STREAM << "reply: PONG";
         }
     });
 

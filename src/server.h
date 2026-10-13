@@ -3,6 +3,7 @@
 #include "websocket.h"
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <queue>
@@ -49,9 +50,8 @@ class Response {
     using RespFunc = std::function<void(std::ostream &, Response *)>;
     using RequestCallbackFn = std::function<void(const std::string &, uint16_t, Response *)>;
 
-    Response() : request(nullptr), delay_timer(nullptr), client_id(0), loop(nullptr) {
+    Response() : delay_timer(nullptr), client_id(0), loop(nullptr) {
     }
-    Response(const Response &) = default;
 
     Response(const std::string &payload, const std::string &content_type = "",
              HttpStatus status = HttpStatus::OK,
@@ -62,6 +62,31 @@ class Response {
              const std::unordered_map<std::string, std::string> &headers = {});
 
     virtual ~Response();
+
+    Response(const Response &other)
+        : onRequestStart(other.onRequestStart), onRequestEnd(other.onRequestEnd), request(nullptr),
+          repeat(other.repeat), respFunc(other.respFunc), content_type(other.content_type),
+          status_code(other.status_code), status_text(other.status_text), headers(other.headers),
+          body(other.body), delay(other.delay), delay_timer(nullptr), client_id(0),
+          loop(other.loop){};
+
+    Response &operator=(const Response &other) {
+        onRequestStart = other.onRequestStart;
+        onRequestEnd = other.onRequestEnd;
+        request = nullptr;
+        repeat = other.repeat;
+        respFunc = other.respFunc;
+        content_type = other.content_type;
+        status_code = other.status_code;
+        status_text = other.status_text;
+        headers = other.headers;
+        body = other.body;
+        delay = other.delay;
+        delay_timer = nullptr;
+        client_id = 0;
+        loop = other.loop;
+        return *this;
+    }
 
     void markRepeat();
     void unmarkRepeat();
@@ -81,6 +106,8 @@ class Response {
 
     void setClientId(size_t id);
     size_t getClientId();
+    void setRequest(std::unique_ptr<http_request> req);
+    const http_request *getRequest();
 
     void setLoop(uv_loop_t *loop);
     void next(const std::function<void(std::stringstream &)> &callback);
@@ -89,8 +116,8 @@ class Response {
     RequestCallbackFn onRequestEnd;
 
   private:
-    http_request *request;
-    bool repeat;
+    std::unique_ptr<http_request> request;
+    bool repeat = false;
     RespFunc respFunc;
     std::string content_type;
     HttpStatus status_code;
@@ -98,12 +125,12 @@ class Response {
     std::unordered_map<std::string, std::string> headers;
     std::string body;
 
-    uint64_t delay;
-    uv_timer_t *delay_timer;
+    uint64_t delay = 0;
+    uv_timer_t *delay_timer = nullptr;
 
-    size_t client_id;
+    size_t client_id = 0;
 
-    uv_loop_t *loop;
+    uv_loop_t *loop = nullptr;
 
     void init();
     void initDelayTimer();
@@ -115,9 +142,9 @@ class WsResponse : public Response {
   public:
     WsResponse() : Response(){};
     WsResponse(RespFunc resp);
+    ~WsResponse();
     WsResponse(const WsResponse &) = default;
     WsResponse &operator=(const WsResponse &) = default;
-    ~WsResponse();
 
     void setWsFrame(WsFrameType type, const std::string &frame);
     void unsetWsFrame();
@@ -189,8 +216,8 @@ class HttpServer {
     void sendErrorResponse(uv_stream_t *client, HttpStatus status_code,
                            const std::string &message = "");
 
-    Response *newResponse(const std::string &method, const std::string &url);
-    WsResponse *newWsResponse(const std::string &url);
+    Response *newResponse(std::unique_ptr<http_request>);
+    WsResponse *newWsResponse(std::unique_ptr<http_request>);
 
   private:
     static std::unordered_map<int, std::string> status_map;

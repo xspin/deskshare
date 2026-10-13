@@ -1,5 +1,6 @@
 #include "h264.hpp"
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <libyuv.h>
 
@@ -23,6 +24,7 @@ void H264Encoder::release() {
 }
 
 bool H264Encoder::init(size_t width, size_t height, float quality, int fps) {
+    assert(width % 2 == 0 && height % 2 == 0);
     x264_param_t param;
     if (x264_param_default_preset(&param, "ultrafast", "zerolatency")) {
         std::cerr << "Failed to preset x264 param\n";

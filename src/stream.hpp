@@ -3,6 +3,7 @@
 #include "server.h"
 #include "singleton.hpp"
 #include "utils.h"
+#include <atomic>
 #include <cstddef>
 #include <iterator>
 #include <mutex>
@@ -32,10 +33,11 @@ class Stream : public Singleton<Stream> {
     void requestStart(const std::string &ip, uint16_t port, size_t id, WsResponse *resp = nullptr);
     void requestEnd(const std::string &ip, uint16_t port, size_t id);
     std::string listRequests();
-    std::string getClientsList();
+    std::string listClients();
 
     bool isH264();
     std::pair<const void *, size_t> getFrame();
+    std::pair<const void *, size_t> capJpegFrame();
 
     std::pair<float, float> stat();
     std::unordered_map<std::string, DetailTuple> &getReqs();
@@ -45,17 +47,20 @@ class Stream : public Singleton<Stream> {
     static void worker(Stream *self);
     static void async_cb(uv_async_t *handle);
     static void worker_cb(uv_async_t *handle);
+    static void worker_timer_cb(uv_timer_t *handle);
 
     uv_loop_t *_loop = nullptr;
     uv_async_t _async;
     uv_loop_t _worker_loop;
     uv_async_t _worker_async;
+    uv_timer_t _worker_timer;
 
-    uint64_t timestamp;
     std::atomic<size_t> _frames{0}, _bytes{0};
-    uint64_t _frame_ts_ms{0};
+    uint64_t _stat_ts_ms{0};
     volatile bool _running = false;
     volatile bool _terminal = false;
+    uint64_t _frame_ts_ms{0};
+    int _max_fps = 10;
 
     size_t _frame_idx{0};
     EncodeType _type;
@@ -65,5 +70,4 @@ class Stream : public Singleton<Stream> {
     std::thread _thread;
 
     std::unordered_map<std::string, DetailTuple> _reqs;
-    std::unordered_map<size_t, uint64_t> captime;
 };

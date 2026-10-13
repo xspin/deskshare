@@ -27,12 +27,22 @@ class Frame {
         return {_width, _height};
     }
 
+    void setSize(size_t width, size_t height) {
+        if (_width != width || _height != height) {
+            LOG_INFO("Frame size changed to %lu x %lu", width, height);
+            _width = width;
+            _height = height;
+        }
+    }
+
   protected:
     std::vector<unsigned char> _frame;
-    size_t _width;
-    size_t _height;
     float _quality = 0.6;
     size_t _fps = 10;
+
+  private:
+    size_t _width = 0;
+    size_t _height = 0;
 };
 
 class FrameJpeg : public Frame {
@@ -43,9 +53,11 @@ class FrameJpeg : public Frame {
     }
 
     size_t next() {
-        if (!Capturer::captureJpg(_frame, _width, _height, _quality)) {
+        size_t w, h;
+        if (!Capturer::captureJpg(_frame, w, h, _quality)) {
             LOG_ERROR_STREAM << "Failed to capture jpeg";
         }
+        setSize(w, h);
         return _frame.size();
     }
 };
@@ -62,15 +74,16 @@ class FrameH264 : public Frame {
     }
 
     size_t next() {
-        if (!Capturer::captureRgba(_rgba, _width, _height)) {
+        size_t w, h;
+        if (!Capturer::captureRgbaEven(_rgba, w, h)) {
             LOG_ERROR_STREAM << "Failed to capture rgba";
             return 0;
         }
-
-        double key = _width * _height * _quality * _fps;
+        setSize(w, h);
+        double key = w * h * _quality * _fps;
         if (key != _key) {
-            LOG_INFO("Init H264 %lux%lu, quality %f, fps %lu", _width, _height, _quality, _fps);
-            if (!_h264.init(_width, _height, _quality, _fps)) {
+            LOG_INFO("Init H264 %lux%lu, quality %f, fps %lu", w, h, _quality, _fps);
+            if (!_h264.init(w, h, _quality, _fps)) {
                 LOG_ERROR_STREAM << "Failed to H264 init";
                 return 0;
             }
@@ -79,14 +92,14 @@ class FrameH264 : public Frame {
 
         _frame.clear();
 
-        auto[fs, kf] = _h264.encode(_rgba, _key_frame);
+        auto [fs, kf] = _h264.encode(_rgba, _key_frame);
         _current_key_frame = kf;
         if (fs <= 0) {
             LOG_ERROR_STREAM << "Failed to H264 encode";
             return 0;
         }
         _key_frame = false;
-        if (fs != _frame.size()) {
+        if ((size_t)fs != _frame.size()) {
             LOG_WARNING_STREAM << "H264 encode mismatched size " << fs << " " << _frame.size();
         }
         return fs;

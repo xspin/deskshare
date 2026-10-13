@@ -13,6 +13,8 @@ Stream::Stream() : _loop(nullptr) {
     uv_async_init(&_worker_loop, &_worker_async, worker_cb);
     _worker_async.data = this;
     _terminal = false;
+    uv_timer_init(&_worker_loop, &_worker_timer);
+    _worker_timer.data = this;
 }
 
 Stream::~Stream() {
@@ -23,6 +25,7 @@ void Stream::close() {
     LOG_INFO_STREAM << "close stream";
     _terminal = true;
 
+    uv_close((uv_handle_t *)&_worker_timer, nullptr);
     uv_async_send(&_worker_async);
     uv_close((uv_handle_t *)&_worker_async, [](uv_handle_t *hd) { uv_loop_close(hd->loop); });
 
@@ -46,6 +49,7 @@ void Stream::setup(int max_fps, float quality, EncodeType type) {
         _frame = static_cast<Frame *>(&_frame_jpeg);
     }
     _frame->setup(quality, max_fps);
+    _max_fps = max_fps;
 }
 
 void Stream::init(uv_loop_t *loop) {
@@ -60,7 +64,7 @@ void Stream::start() {
     assert(_loop);
     LOG_INFO_STREAM << "start stream";
     _running = true;
-    _frame_ts_ms = uv_now(_loop); // milliseconds
+    _stat_ts_ms = uv_now(_loop); // milliseconds
     _frame_idx = 0;
 }
 
@@ -76,6 +80,13 @@ void Stream::async_cb(uv_async_t *handle) {
     self->sendFrame();
 }
 
+void Stream::worker_timer_cb(uv_timer_t *handle) {
+    Stream *self = static_cast<Stream *>(handle->data);
+    self->_frame->next();
+    uv_async_send(&self->_async);
+    self->_frame_ts_ms = uv_now(handle->loop);
+}
+
 // run on worker thread
 void Stream::worker_cb(uv_async_t *handle) {
     Stream *self = static_cast<Stream *>(handle->data);
@@ -86,13 +97,20 @@ void Stream::worker_cb(uv_async_t *handle) {
     if (!self->_running) {
         return;
     }
-    self->_frame->next();
-    uv_async_send(&self->_async);
+
+    int d = 1000 / self->_max_fps - (uv_now(handle->loop) - self->_frame_ts_ms);
+    if (d > 0) {
+        LOG_DEBUG("wating for %d ms", d);
+        uv_timer_start(&self->_worker_timer, worker_timer_cb, d, 0);
+    } else {
+        worker_timer_cb(&self->_worker_timer);
+    }
 }
 
 void Stream::worker(Stream *self) {
     LOG_INFO_STREAM << "frame worker started";
 
+    self->_frame_ts_ms = uv_now(&self->_worker_loop);
     uv_run(&self->_worker_loop, UV_RUN_DEFAULT);
 
     LOG_INFO_STREAM << "frame worker stopped";
@@ -103,11 +121,16 @@ std::pair<const void *, size_t> Stream::getFrame() {
     return {data, size};
 }
 
+std::pair<const void *, size_t> Stream::capJpegFrame() {
+    _frame_jpeg.next();
+    return _frame_jpeg.getFrame();
+}
+
 void Stream::sendFrame() {
     if (_reqs.empty() || !_running)
         return;
 
-    auto [w, h] = Capturer::getResolution();
+    auto [w, h] = _frame->getSize();
     auto [x, y] = Capturer::getCursorPos();
     bool key_frame = _frame_h264.isKeyFrame();
     std::stringstream ss;
@@ -121,7 +144,7 @@ void Stream::sendFrame() {
        << "\"keyFrame\":" << key_frame << ","
        << "\"h264\":" << (isH264() ? "true" : "false") << ","
        << "\"connections\":" << _reqs.size() << ","
-       << "\"clients\":" << getClientsList() << "}";
+       << "\"clients\":" << listClients() << "}";
 
     auto os = std::make_shared<std::stringstream>();
     *os << WsClient::pack_text_frame(ss.str());
@@ -149,10 +172,10 @@ void Stream::sendFrame() {
 }
 
 std::pair<float, float> Stream::stat() {
-    auto prev = _frame_ts_ms;
-    _frame_ts_ms = uv_now(_loop); // milliseconds
+    auto prev = _stat_ts_ms;
+    _stat_ts_ms = uv_now(_loop); // milliseconds
 
-    auto elasped = _frame_ts_ms - prev;
+    auto elasped = _stat_ts_ms - prev;
     float fps = 0, speed = 0;
     if (elasped > 0) {
         fps = _frames * 1000.0 / elasped;
@@ -170,7 +193,15 @@ bool Stream::isH264() {
 void Stream::requestStart(const std::string &ip, uint16_t port, size_t id, WsResponse *resp) {
     std::string key = ip + ":" + std::to_string(port);
     _reqs[key] = {id, std::time(nullptr), resp};
-    LOG_INFO_STREAM << key << " id-" << id << " Enter. Remote Clients: " << _reqs.size();
+    std::string ua;
+    if (resp) {
+        const http_request *req = resp->getRequest();
+        auto it = req->headers.find("User-Agent");
+        ua = it != req->headers.end() ? it->second : "";
+    }
+    LOG_INFO_STREAM << key << " id-" << id << " Enter."
+                    << " Remote Clients: " << _reqs.size() << "\n"
+                    << ua;
     _frame_h264.setKeyFrame();
     if (_reqs.size() == 1) {
         start();
@@ -182,7 +213,6 @@ void Stream::requestEnd(const std::string &ip, uint16_t port, size_t id) {
     std::string key = ip + ":" + std::to_string(port);
     _reqs.erase(key);
     LOG_INFO_STREAM << key << " id-" << id << " Leave. Remote Clients: " << _reqs.size();
-    captime.erase(id);
     if (_reqs.empty()) {
         stop();
     }
@@ -205,7 +235,7 @@ std::string Stream::listRequests() {
     return ss.str();
 }
 
-std::string Stream::getClientsList() {
+std::string Stream::listClients() {
     std::stringstream ss;
     ss << "[";
     bool first = true;

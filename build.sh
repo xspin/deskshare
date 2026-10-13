@@ -34,16 +34,18 @@ if [ $? -eq 0 ]; then
     cp -R build/bin/deskshare.app /tmp/dmg-src/
     ln -s /Applications /tmp/dmg-src/Applications
     arch=$(uname -m)
+    dmg=build/deskshare-${VERSION}-darwin-${arch}.dmg
+    echo "Build ${dmg}"
     hdiutil create -volname "deskshare" \
         -srcfolder /tmp/dmg-src \
-        -ov -format UDZO \
-        ./build/deskshare-${VERSION}-darwin-${arch}.dmg
+        -ov -format UDZO ${dmg}
     exit $?
 fi
 
 hasArg zip
 if [ $? -eq 0 ]; then
     zipfile=build/deskshare-${VERSION}-windows-x86_64.zip
+    echo "Build ${zipfile}"
     rm -f $zipfile
     zip -j $zipfile build/bin/deskshare.exe
     exit $?

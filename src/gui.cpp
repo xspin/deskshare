@@ -174,7 +174,14 @@ void GUI::onDetail(Fl_Widget *w, void *data) {
     auto reqs = s.getReqs();
 
     std::stringstream ss;
-    ss << "\nRemote Clients:\n\n";
+    ss << "Port: " << g_config.port << "\n";
+    ss << "Timeout: " << g_config.timeout << " seconds\n";
+    ss << "Max FPS: " << g_config.fps << "\n";
+    ss << "Quality: " << int(g_config.quality * 100) << "%\n";
+    ss << "Codec: " << (g_config.h264 ? "H.264" : "MJPEG") << "\n";
+    ss << "Screen Size: " << self->screen_width << " x " << self->screen_height << "\n";
+
+    ss << "\nRemote Clients (" << reqs.size() << "):\n\n";
     auto now = std::time(nullptr);
     for (const auto &[key, info] : reqs) {
         auto ts = std::get<1>(info);
@@ -246,6 +253,13 @@ void GUI::previewOn() {
     show_preview = true;
 
     auto [img_w, img_h] = Capturer::getInstance().getResolution();
+    if (img_w != self->screen_width || img_h != self->screen_height) {
+        if (self->screen_width) {
+            LOG_INFO_STREAM << "Screen Resolution changed to " << img_w << " x " << img_h;
+        }
+        self->screen_width = img_w;
+        self->screen_height = img_h;
+    }
     auto preview_w = self->preview->w();
     auto preview_h = self->preview->h();
 
@@ -289,6 +303,10 @@ void GUI::onLog(Fl_Widget *w, void *data) {
             self->previewOn();
         },
         self);
+}
+
+void GUI::showLog() {
+    onLog(nullptr, this);
 }
 
 void GUI::init(std::function<void()> callback) {
@@ -368,7 +386,7 @@ void GUI::init(std::function<void()> callback) {
 
     int enc_x = quality_x + quality_w + dx;
     int enc_w = w + 5;
-    choice_encoder = std::make_unique<Fl_Choice>(enc_x, input_y, enc_w, h, "Encoder");
+    choice_encoder = std::make_unique<Fl_Choice>(enc_x, input_y, enc_w, h, "Codec");
     choice_encoder->align(FL_ALIGN_TOP);
     choice_encoder->add("MJPEG");
     choice_encoder->add("H.264");
@@ -492,9 +510,7 @@ void GUI::activate() {
     button_start->label("▶");
     button_start->activate();
     button_start->labelcolor(FL_DARK_GREEN);
-    info->value("Not Running!");
-    // info->redraw();
-    // Fl::flush();
+    setInfo("Not Running!");
 }
 
 void GUI::deactivate() {
@@ -506,10 +522,14 @@ void GUI::deactivate() {
     button_start->labelcolor(FL_RED);
 }
 
-void GUI::setInfo(const std::string &label) {
-    info->value(label.c_str());
-    // info->redraw();
-    // Fl::flush();
+void GUI::setInfo(const std::string &msg) {
+    info->textcolor(FL_DARK_BLUE);
+    info->value(msg.c_str());
+}
+
+void GUI::setError(const std::string &err) {
+    info->textcolor(FL_DARK_RED);
+    info->value(err.c_str());
 }
 
 void GUI::output(const char *s, size_t n) {
@@ -518,26 +538,26 @@ void GUI::output(const char *s, size_t n) {
 }
 
 bool GUI::updateArgs() {
-    Fl_Color err_color = FL_DARK_RED;
+    std::string err;
     try {
         int t;
         t = std::stoi(input_port->value());
         if (t <= 0 || t > 65535) {
-            info->value("Invalid Port! (1~65535)");
+            err = ("Invalid Port! (1~65535)");
             goto FAILED;
         }
         g_config.port = t;
 
         t = std::stoi(input_fps->value());
         if (t <= 0 || t > 60) {
-            info->value("Invalid FPS! (1~60)");
+            err = ("Invalid FPS! (1~60)");
             goto FAILED;
         }
         g_config.fps = t;
 
         t = std::stoi(input_timeout->value());
         if (t < 0 || t > 604800) { // 7 days, 0 for infinity
-            info->value("Invalid Timeout! (0~604800)");
+            err = ("Invalid Timeout! (0~604800)");
             goto FAILED;
         }
         g_config.timeout = t;
@@ -545,12 +565,11 @@ bool GUI::updateArgs() {
         g_config.quality = (choice_quality->value() + 1) / 10.0f;
     } catch (const std::exception &e) {
         LOG_ERROR_STREAM << "Error parsing arguments: " << e.what();
-        std::string err = "Error: ";
+        err = "Error: ";
         err += e.what();
-        info->value(err.c_str());
         goto FAILED;
     } catch (...) {
-        info->value("Invalid Arguments!");
+        err = ("Invalid Arguments!");
         goto FAILED;
     }
 
@@ -559,7 +578,7 @@ bool GUI::updateArgs() {
     return true;
 
 FAILED:
-    info->textcolor(err_color);
+    setError(err);
     button_start->activate();
     return false;
 }

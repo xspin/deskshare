@@ -10,6 +10,7 @@
 #include <FL/Fl_Text_Buffer.H>
 #include <FL/Fl_Text_Display.H>
 #include <FL/Fl_Window.H>
+#include <cstddef>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -30,8 +31,10 @@ class GUI {
     void output(const char *s, size_t n);
     void deactivate();
     void activate();
-    void setInfo(const std::string &label);
+    void setInfo(const std::string &info);
+    void setError(const std::string &err);
     bool updateArgs();
+    void showLog();
 
   private:
     static void onTimeout(void *data);
@@ -47,6 +50,7 @@ class GUI {
     void focusHandle(int event);
 
   private:
+    // gui size
     int width;
     int height;
 
@@ -54,6 +58,9 @@ class GUI {
     bool show_detail;
     bool show_log;
     bool focused;
+
+    size_t screen_width = 0;
+    size_t screen_height = 0;
 
     std::function<void()> callback;
     std::unique_ptr<Fl_Window> window;

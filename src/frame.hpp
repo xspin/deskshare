@@ -29,7 +29,7 @@ class Frame {
 
     void setSize(size_t width, size_t height) {
         if (_width != width || _height != height) {
-            LOG_INFO("Frame size changed to %lu x %lu", width, height);
+            LOG_INFO("Frame size: %lu x %lu", width, height);
             _width = width;
             _height = height;
         }

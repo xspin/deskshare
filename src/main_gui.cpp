@@ -7,125 +7,126 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <thread>
 
-std::atomic<bool> terminal(false);
 std::atomic<bool> running(false);
-std::mutex mtx;
 uv_async_t async_stop;
+uv_async_t async_start;
+uv_loop_t worker_loop;
+std::function<void()> on_stop;
 
 GUI gui;
+
+static void on_start() {
+    static std::stringstream addrs;
+    addrs.str("");
+    addrs.clear();
+
+    auto tmp = utils::getIpAddress();
+    addrs << "Running on ";
+    int cnt = 0;
+    for (const auto &[eth, ip] : tmp) {
+        LOG_INFO_STREAM << ">> http://" << ip << ":" << g_config.port;
+        if (ip.compare(0, 8, "127.0.0.") == 0) {
+            continue;
+        }
+        addrs << " http://" << ip << ":" << g_config.port << " ";
+        ++cnt;
+    }
+    if (cnt == 0) {
+        addrs << " http://"
+              << "127.0.0.1"
+              << ":" << g_config.port << " ";
+    }
+
+    Fl::awake(
+        [](void *data) {
+            std::stringstream *ss = static_cast<std::stringstream *>(data);
+            gui.setInfo(ss->str());
+            gui.deactivate();
+        },
+        &addrs);
+
+    running = true;
+}
 
 static void async_stop_cb(uv_async_t *handle) {
     LOG_INFO_STREAM << "Async stop signal received";
     HttpServer *server = static_cast<HttpServer *>(handle->data);
     pages::stop();
     server->stop([](uv_handle_t *handle) {
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        uv_stop(handle->loop);
+        // std::this_thread::sleep_for(std::chrono::seconds(3));
         LOG_INFO_STREAM << "HTTP Server stopped";
+        Fl::awake([](void *) { gui.activate(); }, nullptr);
+        running = false;
+        if (on_stop) {
+            on_stop();
+        }
     });
 }
 
-static void awakeWorker() {
-    mtx.unlock();
+static void async_start_cb(uv_async_t *handle) {
+    LOG_INFO_STREAM << "Async start signal received";
+    HttpServer *server = static_cast<HttpServer *>(handle->data);
+
+    Fl::awake([](void *) { gui.deactivate(); }, nullptr);
+
+    LOG_INFO_STREAM << g_config.str();
+    server->setTimeout(g_config.timeout,
+                       [](uv_timer_t *handle, HttpServer *self) { uv_async_send(&async_stop); });
+
+    if (!server->start("0.0.0.0", g_config.port)) {
+        LOG_ERROR_STREAM << "Failed to start server on port " << g_config.port;
+        Fl::awake(
+            [](void *) {
+                gui.activate();
+                gui.showLog();
+                gui.setError("Failed to start server");
+            },
+            nullptr);
+        return;
+    }
+    pages::start();
+
+    on_start();
 }
 
-static void stopWorker() {
+static void startWorker() {
+    uv_async_send(&async_start);
+}
+
+static void stopWorker(std::function<void()> cb) {
+    on_stop = cb;
     uv_async_send(&async_stop);
 }
 
 void worker() {
-    // uv_loop_t* loop = uv_default_loop();
-    uv_loop_t worker_loop;
     uv_loop_t *loop = &worker_loop;
     uv_loop_init(loop);
     uv_async_init(loop, &async_stop, async_stop_cb);
+    uv_async_init(loop, &async_start, async_start_cb);
 
     LOG_INFO_STREAM << "DeskShare " APP_VERSION;
 
     auto [w, h] = Capturer::getResolution();
-    static size_t width = w;
-    static size_t height = h;
 
-    LOG_INFO_STREAM << "Screen Resolution: " << width << " x " << height;
-    uv_timer_t t;
-    uv_timer_init(loop, &t);
-    uv_timer_start(
-        &t,
-        [](uv_timer_t *) {
-            auto [w, h] = Capturer::getResolution();
-            if (w != width || h != height) {
-                LOG_INFO_STREAM << "Screen Resolution changed to " << w << " x " << h;
-                width = w;
-                height = h;
-            }
-        },
-        0, 3000);
+    LOG_INFO_STREAM << "Screen Resolution: " << w << " x " << h;
 
-    mtx.lock();
     HttpServer server(loop);
     pages::init(loop, server);
     async_stop.data = &server;
+    async_start.data = &server;
+    Fl::awake([](void *) { gui.activate(); }, nullptr);
 
-    while (!terminal) {
-        running = false;
+    uv_run(loop, UV_RUN_DEFAULT);
 
-        Fl::awake([](void *) { gui.activate(); }, nullptr);
-
-        mtx.lock(); // waiting for start
-
-        if (terminal)
-            break;
-
-        LOG_INFO_STREAM << g_config.str();
-        server.setTimeout(g_config.timeout,
-                          [](uv_timer_t *handle, HttpServer *self) { uv_async_send(&async_stop); });
-
-        Fl::awake([](void *) { gui.deactivate(); }, nullptr);
-
-        if (!server.start("0.0.0.0", g_config.port)) {
-            LOG_ERROR_STREAM << "Failed to start server on port " << g_config.port;
-            continue;
-        }
-        pages::start();
-
-        running = true;
-
-        std::stringstream addrs;
-        auto tmp = utils::getIpAddress();
-        addrs << "Running on ";
-        int cnt = 0;
-        for (const auto &[eth, ip] : tmp) {
-            LOG_INFO_STREAM << ">> http://" << ip << ":" << g_config.port;
-            if (ip.compare(0, 8, "127.0.0.") == 0) {
-                continue;
-            }
-            addrs << " http://" << ip << ":" << g_config.port << " ";
-            ++cnt;
-        }
-        if (cnt == 0) {
-            addrs << " http://"
-                  << "127.0.0.1"
-                  << ":" << g_config.port << " ";
-        }
-
-        Fl::awake(
-            [](void *data) {
-                std::stringstream *ss = static_cast<std::stringstream *>(data);
-                gui.setInfo(ss->str());
-            },
-            &addrs);
-
-        uv_run(loop, UV_RUN_DEFAULT);
-        running = false;
-    }
+    pages::exit();
 
     uv_close((uv_handle_t *)&async_stop, nullptr);
-    pages::exit();
-    uv_loop_close(loop);
+    uv_close((uv_handle_t *)&async_start, [](uv_handle_t *hd) { uv_loop_close(hd->loop); });
 }
 
 int main(int argc, char *argv[]) {
@@ -142,10 +143,9 @@ int main(int argc, char *argv[]) {
                 return;
             }
             gui.output("\n", 1);
-            mtx.unlock();
-            awakeWorker();
+            startWorker();
         } else {
-            stopWorker();
+            stopWorker(nullptr);
         }
     });
 
@@ -167,10 +167,9 @@ int main(int argc, char *argv[]) {
 
     gui.run();
 
-    terminal = true;
-    stopWorker();
-    awakeWorker();
-    LOG_INFO_STREAM << "GUI Stoped";
+    stopWorker([]() { uv_stop(&worker_loop); });
+
+    LOG_INFO_STREAM << "GUI Exit";
 
     t.join();
 

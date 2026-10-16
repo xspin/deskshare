@@ -5,7 +5,7 @@
 #include <vector>
 
 TEST(performance, captureRgba) {
-    Capturer &cap = Capturer::getInstance();
+    Capturer &cap = Capturer::instance();
     std::vector<unsigned char> img;
     auto [width, height] = cap.getResolution();
 

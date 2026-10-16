@@ -26,7 +26,8 @@ class H264Encoder {
 
     size_t width_;
     size_t height_;
-    std::vector<uint8_t> i420_buffer_;
+    x264_param_t param_;
+    // std::vector<uint8_t> i420_buffer_;
     x264_picture_t pic_in_;
     x264_t *encoder_;
     // size_t frame_idx_;

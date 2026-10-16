@@ -4,6 +4,16 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 
 find_package(GTest REQUIRED)
 
+add_library(unittest STATIC
+   ${CMAKE_SOURCE_DIR}/src/h264/h264.cpp
+   ${CMAKE_SOURCE_DIR}/src/utils.h
+   ${CMAKE_SOURCE_DIR}/src/utils.cpp
+)
+
+target_link_libraries(unittest PRIVATE
+    ${LIBS} capture
+)
+
 set(TEST_LIBS unittest GTest::gtest_main)
 
 add_executable(test_utils test_utils.cpp)

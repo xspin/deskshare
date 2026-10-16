@@ -75,7 +75,7 @@ class FrameH264 : public Frame {
 
     size_t next() {
         size_t w, h;
-        if (!Capturer::captureRgbaEven(_rgba, w, h)) {
+        if (!Capturer::captureRgba(_rgba, w, h)) {
             LOG_ERROR_STREAM << "Failed to capture rgba";
             return 0;
         }

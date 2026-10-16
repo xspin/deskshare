@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(deskshare VERSION 1.3.0)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "12.3")
+
+project(deskshare VERSION 1.3.1)
 message("Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
 
 set(VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
@@ -24,6 +26,7 @@ option(ENABLE_ASAN "Enable Address Sanitizer for memory leak detection" OFF)
 option(ENABLE_DEBUG "Enable Debug compile" OFF)
 option(ENABLE_GUI "Enable GUI build" ON)
 option(ENABLE_TEST "Enable unit test" OFF)
+
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -127,7 +130,7 @@ set(H264_LIBS
 )
 
 # include_directories(${FFMPEG_INC_DIR})
-# include_directories(/usr/local/include)
+include_directories(src/)
 
 if (WIN32)
     add_compile_definitions(PLATFORM_WINDOWS)
@@ -149,9 +152,11 @@ if (ENABLE_ASAN)
     add_link_options(-fsanitize=address)
 endif()
 
+# libcap
+add_subdirectory(src/capture)
+
 set(SRC
     src/h264/h264.cpp
-    src/capture/capturer.cpp
     src/utils.cpp
     src/assets/assets.cpp
     src/logger.cpp
@@ -160,6 +165,7 @@ set(SRC
     src/stream.cpp
     src/pages.cpp
 )
+
 
 if (ENABLE_GUI)
     list(APPEND SRC
@@ -224,6 +230,7 @@ set(LIBS
     ${LIBUV}
     ${LIBCRYPTO}
     ${H264_LIBS}
+    capture
 )
 
 if (ENABLE_GUI)
@@ -288,17 +295,5 @@ endif()
 
 
 if (ENABLE_TEST)
-    add_library(unittest STATIC
-        src/h264/h264.cpp
-        src/capture/capturer.h
-        src/capture/capturer.cpp
-        src/utils.h
-        src/utils.cpp
-    )
-
-    target_link_libraries(unittest PRIVATE
-        ${LIBS}
-    )
-
     add_subdirectory(test)
 endif()

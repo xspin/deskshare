@@ -59,6 +59,8 @@ class GUI {
     bool show_log;
     bool focused;
 
+    bool running = false;
+
     size_t screen_width = 0;
     size_t screen_height = 0;
 

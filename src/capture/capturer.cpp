@@ -4,23 +4,31 @@
 #include <vector>
 
 #if defined(__APPLE__) && defined(__MACH__)
-#include "capturer_macos.cpp"
+#include "darwin/ScreenCapture.hpp"
+#include "darwin/capturer_macos.cpp"
 #elif defined(_WIN32)
-#include "capturer_win.cpp"
+#include "windows/capturer_win.cpp"
 #endif
 
 namespace impl {
 bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
 bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height);
-bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality);
+bool captureJpeg(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality);
 std::pair<size_t, size_t> getCursorLoc();
 std::pair<size_t, size_t> getScreenResolution();
 } // namespace impl
 
+Capturer::Capturer() {
+    // sc_ = &ScreenCapture::instance();
+}
+
+Capturer::~Capturer() {
+}
+
 bool Capturer::captureJpg(std::vector<unsigned char> &jpg, size_t &width, size_t &height,
                           float quality) {
     assert(0 < quality && quality <= 1);
-    return impl::captureScreen(jpg, width, height, quality);
+    return impl::captureJpeg(jpg, width, height, quality);
 }
 
 bool Capturer::captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
@@ -36,12 +44,15 @@ bool Capturer::captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width,
     return impl::captureRgbaScaled(rgba, width, height);
 }
 
-bool Capturer::captureRgbaEven(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
-    auto [w, h] = impl::getScreenResolution();
-    width = w - (w & 1);
-    height = h - (h & 1);
-    return impl::captureRgbaScaled(rgba, width, height);
-}
+// bool Capturer::captureRgbaEven(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+//     auto [w, h] = impl::getScreenResolution();
+//     if (w % 2 || h % 2) {
+//         width = w - (w & 1);
+//         height = h - (h & 1);
+//         return impl::captureRgbaScaled(rgba, width, height);
+//     }
+//     return impl::captureRgba(rgba, width, height);
+// }
 
 bool Capturer::captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
     static int frame_idx = 0;
@@ -86,3 +97,7 @@ void Capturer::rgbaToGray(std::vector<unsigned char> &data, size_t w, size_t h) 
         data[i * 4 + 2] = gray;
     }
 }
+
+// void Capturer::captureI420Async(I420Callback cb) {
+//     sc_->captureI420Async(std::move(cb));
+// }

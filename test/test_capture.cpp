@@ -14,7 +14,7 @@ TEST(cpature, Capturer) {
     size_t width, height;
 
     std::vector<unsigned char> jpg;
-    Capturer &cap = Capturer::getInstance();
+    Capturer &cap = Capturer::instance();
     cap.captureJpg(jpg, width, height, 0.01);
     EXPECT_GT(jpg.size(), 0);
     EXPECT_EQ(width, w);
@@ -30,3 +30,21 @@ TEST(cpature, Capturer) {
     EXPECT_EQ(width, w);
     EXPECT_EQ(height, h);
 }
+
+/*
+TEST(cpature, async) {
+    auto &cap = Capturer::instance();
+    size_t fid = 0;
+    printf("Testing captureI420Async...\n");
+    while (fid < 100) {
+        cap.captureI420Async([&fid](const uint8_t *yPlane, size_t yStride, const uint8_t *uPlane,
+                                    size_t uStride, const uint8_t *vPlane, size_t vStride,
+                                    size_t width, size_t height) {
+            printf("[%lu] %lu x %lu\n", fid++, width, height);
+            printf("y %p %lu\n", yPlane, yStride);
+            printf("u %p %lu\n", uPlane, uStride);
+            printf("v %p %lu\n", vPlane, vStride);
+        });
+    }
+}
+*/

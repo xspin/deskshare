@@ -3,19 +3,15 @@
 #include <string>
 #include <vector>
 
-class Capturer {
+#include "capframe.hpp"
+#include "singleton.hpp"
+
+// class ScreenCapture;
+
+class Capturer : public Singleton<Capturer> {
+    friend Singleton<Capturer>;
 
   public:
-    Capturer(const Capturer &) = delete;
-    Capturer &operator=(const Capturer &) = delete;
-    Capturer(Capturer &&) = delete;
-    Capturer &operator=(Capturer &&) = delete;
-
-    static Capturer &getInstance() {
-        static Capturer instance; // C++11 起，局部静态变量初始化是线程安全的
-        return instance;
-    }
-
     static std::pair<size_t, size_t> getCursorPos();
     static std::pair<size_t, size_t> getResolution();
 
@@ -25,11 +21,16 @@ class Capturer {
     static bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
     static bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t height);
     static bool captureRgbaMock(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
-    static bool captureRgbaEven(std::vector<unsigned char> &rgba, size_t &width, size_t &height);
 
     static void rgbaToGray(std::vector<unsigned char> &rgba, size_t width, size_t height);
 
+    // void captureI420Async(I420Callback);
+
   private:
-    Capturer() = default;
-    ~Capturer() = default;
+    Capturer();
+    ~Capturer();
+
+    void init();
+
+    // ScreenCapture *sc_ = nullptr;
 };

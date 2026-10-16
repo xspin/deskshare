@@ -174,12 +174,13 @@ void GUI::onDetail(Fl_Widget *w, void *data) {
     auto reqs = s.getReqs();
 
     std::stringstream ss;
+    ss << "Screen Size: " << self->screen_width << " x " << self->screen_height << "\n";
     ss << "Port: " << g_config.port << "\n";
     ss << "Timeout: " << g_config.timeout << " seconds\n";
     ss << "Max FPS: " << g_config.fps << "\n";
     ss << "Quality: " << int(g_config.quality * 100) << "%\n";
     ss << "Codec: " << (g_config.h264 ? "H.264" : "MJPEG") << "\n";
-    ss << "Screen Size: " << self->screen_width << " x " << self->screen_height << "\n";
+    ss << "Status: " << (self->running ? "running" : "stopped") << "\n";
 
     ss << "\nRemote Clients (" << reqs.size() << "):\n\n";
     auto now = std::time(nullptr);
@@ -206,7 +207,7 @@ void GUI::previewImpl(void *data) {
     GUI *self = static_cast<GUI *>(data);
 
     Fl_Timestamp frame_start = Fl::now();
-    auto &cap = Capturer::getInstance();
+    auto &cap = Capturer::instance();
     auto [width, height] = self->img_size;
     cap.captureRgbaScaled(self->pixel, width, height);
 
@@ -252,7 +253,7 @@ void GUI::previewOn() {
     }
     show_preview = true;
 
-    auto [img_w, img_h] = Capturer::getInstance().getResolution();
+    auto [img_w, img_h] = Capturer::instance().getResolution();
     if (img_w != self->screen_width || img_h != self->screen_height) {
         if (self->screen_width) {
             LOG_INFO_STREAM << "Screen Resolution changed to " << img_w << " x " << img_h;
@@ -511,6 +512,7 @@ void GUI::activate() {
     button_start->activate();
     button_start->labelcolor(FL_DARK_GREEN);
     setInfo("Not Running!");
+    running = false;
 }
 
 void GUI::deactivate() {
@@ -520,6 +522,7 @@ void GUI::deactivate() {
     button_start->label("▣");
     button_start->activate();
     button_start->labelcolor(FL_RED);
+    running = true;
 }
 
 void GUI::setInfo(const std::string &msg) {

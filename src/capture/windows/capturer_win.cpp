@@ -50,7 +50,7 @@ static HBITMAP captureScreenToBitmap(size_t &width, size_t &height) {
     return hBitmap;
 }
 
-static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap) {
+static bool HBITMAPToBGRA(std::vector<unsigned char> &bgra, HBITMAP hBitmap) {
     if (!hBitmap)
         return false;
 
@@ -77,8 +77,8 @@ static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap) {
     bmi.bmiHeader.biCompression = BI_RGB;
 
     // 4. 分配缓冲区并获取像素
-    rgba.resize(width * height * 4);
-    int lines = GetDIBits(hdcMem, hBitmap, 0, height, rgba.data(), &bmi, DIB_RGB_COLORS);
+    bgra.resize(width * height * 4);
+    int lines = GetDIBits(hdcMem, hBitmap, 0, height, bgra.data(), &bmi, DIB_RGB_COLORS);
 
     // 清理 DC
     SelectObject(hdcMem, hOld);
@@ -88,10 +88,6 @@ static bool HBITMAPToRGBA(std::vector<unsigned char> &rgba, HBITMAP hBitmap) {
     if (lines == 0)
         return false;
 
-    // 5. BGRA → RGBA：交换 R 和 B
-    for (size_t i = 0; i < width * height; ++i) {
-        std::swap(rgba[i * 4], rgba[i * 4 + 2]); // B <-> R
-    }
     return true;
 }
 
@@ -177,7 +173,7 @@ static bool bitmapToJpeg(std::vector<unsigned char> &jpegData, HBITMAP hBitmap, 
     return true;
 }
 
-bool captureScreen(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality) {
+bool captureJpeg(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality) {
     static GdiplusInitializer gdiplusInitializer;
 
     HBITMAP hBitmap = captureScreenToBitmap(width, height);
@@ -207,6 +203,7 @@ static void scaleRGBA_Nearest(const unsigned char *src, int srcW, int srcH, unsi
     }
 }
 
+/*
 static void scaleRGBA_Bilinear(const unsigned char *src, int srcW, int srcH, unsigned char *dst,
                                int dstW, int dstH) {
     for (int y = 0; y < dstH; y++) {
@@ -235,15 +232,27 @@ static void scaleRGBA_Bilinear(const unsigned char *src, int srcW, int srcH, uns
         }
     }
 }
+*/
 
-bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+bool captureBgra(std::vector<unsigned char> &bgra, size_t &width, size_t &height) {
     HBITMAP hBitmap = captureScreenToBitmap(width, height);
     if (!hBitmap) {
         return false;
     }
 
-    bool ret = HBITMAPToRGBA(rgba, hBitmap);
+    bool ret = HBITMAPToBGRA(bgra, hBitmap);
     DeleteObject(hBitmap);
+
+    return ret;
+}
+
+bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    bool ret = captureBgra(rgba, width, height);
+
+    // BGRA → RGBA：交换 R 和 B
+    for (size_t i = 0; i < width * height; ++i) {
+        std::swap(rgba[i * 4], rgba[i * 4 + 2]); // B <-> R
+    }
     return ret;
 }
 

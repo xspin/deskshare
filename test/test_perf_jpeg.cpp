@@ -6,7 +6,7 @@
 
 TEST(performance, capture) {
 
-    Capturer &cap = Capturer::getInstance();
+    Capturer &cap = Capturer::instance();
 
     std::vector<unsigned char> jpg;
     size_t w, h;

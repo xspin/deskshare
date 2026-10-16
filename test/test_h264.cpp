@@ -8,7 +8,7 @@
 #include <vector>
 
 TEST(encoder, h264) {
-    auto &cap = Capturer::getInstance();
+    auto &cap = Capturer::instance();
     auto [width, height] = cap.getResolution();
     std::vector<unsigned char> rgba;
 

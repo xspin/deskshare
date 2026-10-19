@@ -42,8 +42,8 @@ if (WIN32)
     set(LIBUV_ROOT_DIR "C:/libuv-1.51.0")
     set(LIBUV_LIB_DIR "${LIBUV_ROOT_DIR}/build")
 
-    set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL-Win64")
-    set(OPENSSL_LIB_DIR "${OPENSSL_ROOT_DIR}/lib/VC/x64/MT")
+    set(OPENSSL_ROOT_DIR "C:/OpenSSL-1.0.0a-bin-x64/x86_64-w64-mingw32")
+    set(OPENSSL_LIB_DIR "${OPENSSL_ROOT_DIR}/lib")
 
     set(FLTK_ROOT_DIR "C:/fltk-1.4.4")
     set(FLTK_LIB_DIR "${FLTK_ROOT_DIR}/build/lib")
@@ -83,7 +83,7 @@ find_library(LIBUV
 )
 
 find_library(LIBCRYPTO
-    NAMES libcrypto.a libcrypto.lib libcrypto_static.lib
+    NAMES libcrypto.a libcrypto_static.lib
     PATHS ${OPENSSL_LIB_DIR}
 )
 

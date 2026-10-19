@@ -429,7 +429,7 @@ class WsPlayer {
 
     getDecoderName() {
         if (!this.isPlaying || this.ish264 == null) return "";
-        return this.ish264 ? "H.264" : "MJPEG";
+        return (this.ish264 ? "H.264" : "MJPEG") + ` ${this.frame_width}x${this.frame_height}`;
     }
 }
 

@@ -393,9 +393,11 @@ class WsPlayer {
             this.ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
         }
 
-        const x = drawX + drawWidth * this.rx - this.cursorSize / 4;
-        const y = drawY + drawHeight * this.ry - this.cursorSize / 4;
-        this.ctx.drawImage(this.cursorImg, x, y, this.cursorSize, this.cursorSize);
+        if (this.rx > 0 || this.ry > 0) {
+            const x = drawX + drawWidth * this.rx - this.cursorSize / 4;
+            const y = drawY + drawHeight * this.ry - this.cursorSize / 4;
+            this.ctx.drawImage(this.cursorImg, x, y, this.cursorSize, this.cursorSize);
+        }
     }
 
     drawPause() {

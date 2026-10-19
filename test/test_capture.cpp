@@ -1,5 +1,9 @@
 #include "capture/capturer.h"
+#include "capture/darwin/ScreenCapture.hpp"
+#include <chrono>
+#include <cstddef>
 #include <gtest/gtest.h>
+#include <thread>
 #include <vector>
 
 TEST(cpature, Capturer) {
@@ -25,26 +29,10 @@ TEST(cpature, Capturer) {
     EXPECT_EQ(width, w);
     EXPECT_EQ(height, h);
 
-    std::vector<unsigned char> rgba;
-    cap.captureRgba(jpg, width, height);
+    std::vector<unsigned char> bgra;
+    cap.captureBgra(bgra, width, height);
+
+    cap.captureBgra(bgra, width, height);
     EXPECT_EQ(width, w);
     EXPECT_EQ(height, h);
 }
-
-/*
-TEST(cpature, async) {
-    auto &cap = Capturer::instance();
-    size_t fid = 0;
-    printf("Testing captureI420Async...\n");
-    while (fid < 100) {
-        cap.captureI420Async([&fid](const uint8_t *yPlane, size_t yStride, const uint8_t *uPlane,
-                                    size_t uStride, const uint8_t *vPlane, size_t vStride,
-                                    size_t width, size_t height) {
-            printf("[%lu] %lu x %lu\n", fid++, width, height);
-            printf("y %p %lu\n", yPlane, yStride);
-            printf("u %p %lu\n", uPlane, uStride);
-            printf("v %p %lu\n", vPlane, vStride);
-        });
-    }
-}
-*/

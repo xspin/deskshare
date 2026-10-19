@@ -158,6 +158,7 @@ add_subdirectory(src/capture)
 set(SRC
     src/h264/h264.cpp
     src/utils.cpp
+    src/frame.cpp
     src/assets/assets.cpp
     src/logger.cpp
     src/websocket.cpp

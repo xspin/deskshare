@@ -26,6 +26,8 @@
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.developer-tools</string>  <!-- App 分类（可选） -->
   
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Require Screen Capture Permission</string>
   <key>NSHighResolutionCapable</key>
   <true/>  <!-- 支持高分屏（Retina） -->
 </dict>

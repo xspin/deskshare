@@ -18,7 +18,7 @@ struct Args {
     bool debug = false;
     int port = 2333;
     float quality = 0.6;
-    int fps = 10;
+    int fps = 15;
     int timeout = 3600; // seconds
     bool color = 0;
     bool h264 = true;

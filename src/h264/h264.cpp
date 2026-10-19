@@ -3,9 +3,9 @@
 #include <cstring>
 #include <iostream>
 #include <libyuv.h>
+#include <sys/types.h>
 
 H264Encoder::H264Encoder() : encoder_(nullptr) {
-    memset(&pic_in_, 0, sizeof(pic_in_));
 }
 
 H264Encoder::~H264Encoder() {
@@ -13,10 +13,6 @@ H264Encoder::~H264Encoder() {
 }
 
 void H264Encoder::release() {
-    if (pic_in_.img.plane[0]) {
-        x264_picture_clean(&pic_in_);
-        memset(&pic_in_, 0, sizeof(pic_in_));
-    }
     if (encoder_) {
         x264_encoder_close(encoder_);
         encoder_ = nullptr;
@@ -31,9 +27,9 @@ bool H264Encoder::init(size_t width, size_t height, float quality, int fps) {
     width_ = width;
     height_ = height;
     // make size even
-    width = width + (width & 1);
-    height = height + (height & 1);
-    // assert(width % 2 == 0 && height % 2 == 0);
+    // width = width + (width & 1);
+    // height = height + (height & 1);
+    assert(width % 2 == 0 && height % 2 == 0);
 
     assert(quality >= 0 && quality <= 1);
 
@@ -80,95 +76,59 @@ bool H264Encoder::init(size_t width, size_t height, float quality, int fps) {
         return false;
     }
 
-    if (x264_picture_alloc(&pic_in_, X264_CSP_I420, width, height)) {
-        std::cerr << "Failed to alloc x264 picture\n";
-        return false;
-    }
+    // if (x264_picture_alloc(&pic_in_, X264_CSP_I420, width, height)) {
+    //     std::cerr << "Failed to alloc x264 picture\n";
+    //     return false;
+    // }
 
-    // i420_buffer_.resize(width * height * 3 / 2);
-    // frame_idx_ = 0;
+    x264_picture_init(&pic_in_);
 
-    // start_time_ = std::chrono::steady_clock::now();
     return true;
 }
 
-bool H264Encoder::rgbaToI420(const std::vector<uint8_t> &rgba) {
-    // 计算各 plane 的指针
+bool H264Encoder::bgraToI420(const std::vector<uint8_t> &bgra) {
     size_t width = param_.i_width;
     size_t height = param_.i_height;
 
-    // uint8_t *y_plane = i420_buffer_.data();
-    // uint8_t *u_plane = y_plane + width * height;
-    // uint8_t *v_plane = u_plane + width * height / 4;
+    static std::vector<uint8_t> y_plane_, u_plane_, v_plane_;
+
+    size_t y_size = width * height;
+    size_t uv_size = width * height / 4;
+    y_plane_.resize(y_size);
+    u_plane_.resize(uv_size);
+    v_plane_.resize(uv_size);
+
+    pic_in_.img.i_csp = X264_CSP_I420;
+    pic_in_.img.i_plane = 3;
+    pic_in_.img.i_stride[0] = width;
+    pic_in_.img.i_stride[1] = width / 2;
+    pic_in_.img.i_stride[2] = width / 2;
+    pic_in_.img.plane[0] = y_plane_.data();
+    pic_in_.img.plane[1] = u_plane_.data();
+    pic_in_.img.plane[2] = v_plane_.data();
+
     uint8_t *y_plane = pic_in_.img.plane[0];
     uint8_t *u_plane = pic_in_.img.plane[1];
     uint8_t *v_plane = pic_in_.img.plane[2];
 
-    int ret;
-    if (width_ & 1 || height_ & 1) {
-        int ySize = width_ * height_; // 实际大小(奇数)
-        int yWidth = width_;
-        int uvWidth = width / 2;
-        int uvHeight = height / 2;
-        int uvSize = uvWidth * uvHeight;
-
-        static std::vector<uint8_t> yBuffer;
-        static std::vector<uint8_t> uBuffer;
-        static std::vector<uint8_t> vBuffer;
-
-        yBuffer.resize(ySize);
-        uBuffer.resize(uvSize);
-        vBuffer.resize(uvSize);
-
-        // 注意：stride 参数需要根据实际内存布局填写，这里假设是紧凑的
-        ret = libyuv::ABGRToI420(rgba.data(), width_ * 4, // 源数据及 stride
-                                 yBuffer.data(), yWidth,  // Y 平面及 stride
-                                 uBuffer.data(), uvWidth, // U 平面及 stride（使用向上取整后的宽度）
-                                 vBuffer.data(), uvWidth, // V 平面及 stride
-                                 width_, height_          // 实际宽高（奇数）
-        );
-        if (ret == 0) {
-            ret = libyuv::I420Scale(yBuffer.data(), yWidth, // 源 Y 平面
-                                    uBuffer.data(),
-                                    uvWidth,                 // stride 用向上取偶的宽度
-                                    vBuffer.data(), uvWidth, // 源 V 平面
-                                    width_, height_,         // 源尺寸（奇数）
-                                    y_plane, width,          // 目标 Y 平面（偶数尺寸）
-                                    u_plane, width / 2,      // 目标 U 平面
-                                    v_plane, width / 2,      // 目标 V 平面
-                                    width, height,           // 目标尺寸（偶数）
-                                    libyuv::kFilterNone      // 过滤模式
-            );
-        }
-
-    } else {
-        // I420 各 plane 的 stride = 对应宽度
-        size_t stride = width / 2;
-        ret = libyuv::ABGRToI420(rgba.data(), width * 4, // src, src_stride
+    // I420 各 plane 的 stride = 对应宽度
+    size_t stride = width / 2;
+    int ret = libyuv::ARGBToI420(bgra.data(), width * 4, // src, src_stride
                                  y_plane, width,         // dst_y, dst_stride_y
                                  u_plane, stride,        // dst_u, dst_stride_u
                                  v_plane, stride,        // dst_v, dst_stride_v
                                  width, height           // width, height
-        );
-    }
+    );
 
     if (ret) {
-        std::cerr << "Failed to ABGRToI420\n";
+        std::cerr << "Failed to ARGBToI420\n";
         return false;
     }
-    // -------- 填充 x264 输入图像 --------
-    // 将 libyuv 转换结果拷贝到 x264 的 picture 结构中
-    // 注意：实际生产代码可直接操作 pic_in.img.plane 避免额外拷贝
-    // memcpy(pic_in_.img.plane[0], y_plane, width * height);
-    // memcpy(pic_in_.img.plane[1], u_plane, width * height / 4);
-    // memcpy(pic_in_.img.plane[2], v_plane, width * height / 4);
+
     return true;
 }
 
-std::pair<int, bool> H264Encoder::encode(const std::vector<uint8_t> &rgba, bool key_frame,
-                                         bool flush) {
-    if (!rgbaToI420(rgba))
-        return {-1, false};
+std::pair<int, bool> H264Encoder::encode(bool key_frame) {
 
     x264_picture_t pic_out;
     x264_nal_t *nals = nullptr;
@@ -181,14 +141,34 @@ std::pair<int, bool> H264Encoder::encode(const std::vector<uint8_t> &rgba, bool 
         pic_in_.i_type = X264_TYPE_AUTO; // 恢复自动决策
     }
 
-    auto p = flush ? nullptr : &pic_in_;
-
     bool kf = false;
-    if ((frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, p, &pic_out)) > 0) {
+    if ((frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, &pic_in_, &pic_out)) > 0) {
         kf = pic_out.b_keyframe != 0;
         for (int i = 0; i < i_nals; i++) {
             pktHandle_(nals[i].p_payload, nals[i].i_payload);
         }
     }
     return {frame_size, kf};
+}
+
+std::pair<int, bool> H264Encoder::encodeBGRA(const std::vector<uint8_t> &bgra, bool key_frame) {
+    if (!bgraToI420(bgra))
+        return {-1, false};
+    return encode(key_frame);
+}
+
+std::pair<int, bool> H264Encoder::encodeNV12(const uint8_t *ydata, size_t y_stride,
+                                             const uint8_t *uvdata, size_t uv_stride,
+                                             bool key_frame) {
+    pic_in_.img.i_csp = X264_CSP_NV12;
+    pic_in_.img.i_plane = 2; // NV12 只有 2 个平面
+
+    // 平面 0：Y
+    pic_in_.img.plane[0] = (uint8_t *)ydata;
+    pic_in_.img.i_stride[0] = y_stride;
+
+    // 平面 1：UV（交错，不要拆）
+    pic_in_.img.plane[1] = (uint8_t *)uvdata;
+    pic_in_.img.i_stride[1] = uv_stride;
+    return encode(key_frame);
 }

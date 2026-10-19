@@ -58,7 +58,6 @@ static void async_stop_cb(uv_async_t *handle) {
     HttpServer *server = static_cast<HttpServer *>(handle->data);
     pages::stop();
     server->stop([](uv_handle_t *handle) {
-        // std::this_thread::sleep_for(std::chrono::seconds(3));
         LOG_INFO_STREAM << "HTTP Server stopped";
         Fl::awake([](void *) { gui.activate(); }, nullptr);
         running = false;
@@ -172,6 +171,7 @@ int main(int argc, char *argv[]) {
     LOG_INFO_STREAM << "GUI Exit";
 
     t.join();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     return 0;
 }

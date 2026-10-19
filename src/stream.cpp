@@ -1,4 +1,5 @@
 #include "stream.hpp"
+#include "capturer.h"
 #include "logger.h"
 #include "server.h"
 #include <cassert>
@@ -20,6 +21,8 @@ Stream::~Stream() {
 }
 
 void Stream::close() {
+    Capturer::stop();
+
     stop();
     LOG_INFO_STREAM << "close stream";
     _terminal = true;
@@ -130,7 +133,7 @@ void Stream::sendFrame() {
         return;
 
     auto [w, h] = _frame->getSize();
-    auto [x, y] = Capturer::getCursorPos();
+    auto [x, y] = _frame->getCursor();
     bool key_frame = _frame_h264.isKeyFrame();
     std::stringstream ss;
     ss << "{"

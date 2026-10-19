@@ -13,15 +13,17 @@ class H264Encoder {
     ~H264Encoder();
 
     bool init(size_t width, size_t height, float quality, int fps);
-    std::pair<int, bool> encode(const std::vector<uint8_t> &rgba, bool key_frame = false,
-                                bool flush = false);
+    std::pair<int, bool> encodeBGRA(const std::vector<uint8_t> &bgra, bool key_frame = false);
+    std::pair<int, bool> encodeNV12(const uint8_t *ydata, size_t y_stride, const uint8_t *uvdata,
+                                    size_t uv_stride, bool key_frame = false);
 
     void onPackets(packetHandler hd) {
         pktHandle_ = std::move(hd);
     }
 
   private:
-    bool rgbaToI420(const std::vector<uint8_t> &rgba);
+    std::pair<int, bool> encode(bool key_frame);
+    bool bgraToI420(const std::vector<uint8_t> &bgra);
     void release();
 
     size_t width_;

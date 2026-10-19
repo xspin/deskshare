@@ -5,7 +5,56 @@
 #include <iterator>
 #include <vector>
 
+#include "ScreenCapture.hpp"
+
 namespace impl {
+
+float getScale() {
+    static float scale = 0;
+    if (scale > 0)
+        return scale;
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
+    size_t real_width = CGDisplayModeGetPixelWidth(mode);
+    size_t logical_width = CGDisplayModeGetWidth(mode);
+    CGDisplayModeRelease(mode);
+    scale = (float)real_width / logical_width;
+    return scale;
+}
+
+std::pair<size_t, size_t> getCursorLoc() {
+    CGEventRef event = CGEventCreate(nullptr);
+    CGPoint pos = CGEventGetLocation(event);
+    CFRelease(event);
+    return {pos.x, pos.y};
+}
+
+std::pair<size_t, size_t> getScreenResolution() {
+    CGRect bounds = CGDisplayBounds(CGMainDisplayID());
+    size_t width = CGRectGetWidth(bounds);
+    size_t height = CGRectGetHeight(bounds);
+    // ensure even size
+    width += width & 1;
+    height += height & 1;
+    return {width, height};
+}
+
+std::pair<size_t, size_t> getScreenResolutionPhysical() {
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
+
+    // real pixel size (maybe equals logical pix times 2)
+    size_t width = CGDisplayModeGetPixelWidth(mode);
+    size_t height = CGDisplayModeGetPixelHeight(mode);
+
+    // logical pixel size
+    // size_t width = CGDisplayModeGetWidth(mode);
+    // size_t height = CGDisplayModeGetHeight(mode);
+    CGDisplayModeRelease(mode);
+
+    // CGRect bounds = CGDisplayBounds(CGMainDisplayID());
+    // size_t width = CGRectGetWidth(bounds);
+    // size_t height = CGRectGetHeight(bounds);
+    return {width, height};
+}
 
 // 截取指定显示器的全屏图像
 static inline CGImageRef captureFullScreen(CGDirectDisplayID displayID) {
@@ -56,7 +105,6 @@ static bool CGImageToRGBA(std::vector<unsigned char> &rgba, CGImageRef image, si
     // 把 CGImage 绘制进去，完成格式转换
     CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), image);
 
-    // CGColorSpaceRelease(colorSpace);
     return true;
 }
 
@@ -137,38 +185,6 @@ static bool CGImageToJPEGData(std::vector<unsigned char> &jpegData, CGImageRef i
     return true;
 }
 
-// TODO
-static void listDisplays() {
-    std::cout << "Main Display ID: " << CGMainDisplayID() << std::endl;
-    std::cout << "Direct Main: " << kCGDirectMainDisplay << std::endl;
-    CGDirectDisplayID displays[32];
-    uint32_t count = 0;
-    CGGetActiveDisplayList(32, displays, &count);
-
-    // displays[0] 是主显示器，displays[1..count-1] 是其他显示器
-    for (uint32_t i = 0; i < count; i++) {
-        printf("Display %u: %u\n", i, displays[i]);
-    }
-}
-
-std::pair<size_t, size_t> getScreenResolution() {
-    // CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
-
-    // real pixel size (maybe equals logical pix times 2)
-    // width = CGDisplayModeGetPixelWidth(mode);
-    // height = CGDisplayModeGetPixelHeight(mode);
-
-    // logical pixel size
-    // size_t width = CGDisplayModeGetWidth(mode);
-    // size_t height = CGDisplayModeGetHeight(mode);
-    // CGDisplayModeRelease(mode);
-
-    CGRect bounds = CGDisplayBounds(CGMainDisplayID());
-    size_t width = CGRectGetWidth(bounds);
-    size_t height = CGRectGetHeight(bounds);
-    return {width, height};
-}
-
 bool captureJpeg(std::vector<unsigned char> &jpeg, size_t &width, size_t &height, float quality) {
     // todo select display id
     CGImageRef imgRef = captureFullScreen(kCGDirectMainDisplay);
@@ -189,6 +205,30 @@ bool captureJpeg(std::vector<unsigned char> &jpeg, size_t &width, size_t &height
     CGImageRelease(imgRef);
 
     return ret;
+}
+
+CGImageRef BGRAToCGImage(std::vector<uint8_t> &bgra, size_t width, size_t height) {
+    CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, bgra.data(), bgra.size(), NULL);
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+
+    CGImageRef cgImage =
+        CGImageCreate(width, height,
+                      8,         // bitsPerComponent
+                      32,        // bitsPerPixel
+                      width * 4, // bytesPerRow
+                      colorSpace,
+                      kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little, // BGRA
+                      provider, NULL, false, kCGRenderingIntentDefault);
+
+    CGColorSpaceRelease(colorSpace);
+    CGDataProviderRelease(provider);
+    return cgImage;
+}
+
+bool captureBgra(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
+    auto &sc = ScreenCapture::instance();
+    return sc.captureBGRA(rgba, width, height);
 }
 
 bool captureRgba(std::vector<unsigned char> &rgba, size_t &width, size_t &height) {
@@ -215,13 +255,6 @@ bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t he
     bool ret = CGImageToRGBAData(rgba, imgRef, width, height);
     CGImageRelease(imgRef);
     return ret;
-}
-
-std::pair<size_t, size_t> getCursorLoc() {
-    CGEventRef event = CGEventCreate(nullptr);
-    CGPoint pos = CGEventGetLocation(event);
-    CFRelease(event);
-    return {pos.x, pos.y};
 }
 
 } // namespace impl

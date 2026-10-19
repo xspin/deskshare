@@ -17,12 +17,14 @@ TEST(performance, capture) {
         fprintf(stdout, "testing for quality %.2f, %lux%lu\n", q, w, h);
         fflush(stdout);
         for (int i = 0; i < frames; i++) {
+            fprintf(stdout, "\r  frame: %d", i);
+            fflush(stdout);
             cap.captureJpg(jpg, w, h, q);
         }
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         float fps = frames * 1000.0 / duration;
-        fprintf(stdout, "    quality: %.0f%%  fps: %.2f\n", q * 100, fps);
+        fprintf(stdout, "\r    quality: %.0f%%  fps: %.2f\n", q * 100, fps);
         fflush(stdout);
     }
 }

@@ -6,13 +6,13 @@ if (DARWIN)
     list(APPEND CAP_SRC
         darwin/ScreenCaptureImpl.mm
         darwin/ScreenCapture.cpp
-        darwin/FrameProcessor.cpp
     )
 
     set(CAP_LIBS 
-        "-framework ScreenCaptureKit"
+        # "-framework ScreenCaptureKit"
         "-framework CoreMedia"
         "-framework CoreVideo"
+        "-framework AVFoundation"
     )
 elseif (WIN32)
     list(APPEND CAP_SRC
@@ -21,9 +21,10 @@ elseif (WIN32)
 
 endif()
 
+
 add_library(capture STATIC ${CAP_SRC})
 
-target_link_libraries(capture PRIVATE ${CAP_LIBS})
+target_link_libraries(capture PRIVATE ${CAP_LIBS} ${LIBYUV})
 
 target_include_directories(capture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

@@ -23,6 +23,29 @@ class GdiplusInitializer {
     ULONG_PTR gdiplusToken;
 };
 
+std::pair<size_t, size_t> getScreenResolution() {
+    // 逻辑像素
+    size_t width = GetSystemMetrics(SM_CXSCREEN);  // 屏幕宽度（像素）
+    size_t height = GetSystemMetrics(SM_CYSCREEN); // 屏幕高度（像素）
+
+    // width = GetSystemMetrics(SM_CXFULLSCREEN);
+    // height = GetSystemMetrics(SM_CYFULLSCREEN);
+
+    // ensure even size
+    width += (width & 1);
+    height += (height & 1);
+    return {width, height};
+}
+
+std::pair<size_t, size_t> getCursorLoc() {
+    POINT pos;
+    if (GetCursorPos(&pos)) {
+        return {pos.x, pos.y};
+    }
+    std::cerr << "GetCursorPos failed: " << GetLastError() << std::endl;
+    return {0, 0};
+}
+
 // 截取屏幕到 HBITMAP
 static HBITMAP captureScreenToBitmap(size_t &width, size_t &height) {
     // 获取屏幕 DC
@@ -32,8 +55,11 @@ static HBITMAP captureScreenToBitmap(size_t &width, size_t &height) {
         return NULL;
 
     // 获取屏幕尺寸
-    width = GetDeviceCaps(hScreenDC, HORZRES);
-    height = GetDeviceCaps(hScreenDC, VERTRES);
+    // width = GetDeviceCaps(hScreenDC, HORZRES);
+    // height = GetDeviceCaps(hScreenDC, VERTRES);
+    auto t = getScreenResolution();
+    width = t.first;
+    height = t.second;
 
     // 创建内存 DC 和位图
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -269,25 +295,5 @@ bool captureRgbaScaled(std::vector<unsigned char> &rgba, size_t width, size_t he
     // scaleRGBA_Bilinear(buf.data(), w, h, rgba.data(), width, height);
     scaleRGBA_Nearest(buf.data(), w, h, rgba.data(), width, height);
     return true;
-}
-
-std::pair<size_t, size_t> getScreenResolution() {
-    // 方法 1：忽略系统缩放（获取物理像素）
-    size_t width = GetSystemMetrics(SM_CXSCREEN);  // 屏幕宽度（像素）
-    size_t height = GetSystemMetrics(SM_CYSCREEN); // 屏幕高度（像素）
-
-    // 方法 2：适配系统缩放（获取逻辑分辨率，如 1920x1080 缩放 150% 后为 1280x720）
-    // log_width = GetSystemMetrics(SM_CXFULLSCREEN);
-    // log_height = GetSystemMetrics(SM_CYFULLSCREEN);
-    return {width, height};
-}
-
-std::pair<size_t, size_t> getCursorLoc() {
-    POINT pos;
-    if (GetCursorPos(&pos)) {
-        return {pos.x, pos.y};
-    }
-    std::cerr << "GetCursorPos failed: " << GetLastError() << std::endl;
-    return {0, 0};
 }
 } // namespace impl

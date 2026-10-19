@@ -10,7 +10,7 @@
 TEST(encoder, h264) {
     auto &cap = Capturer::instance();
     auto [width, height] = cap.getResolution();
-    std::vector<unsigned char> rgba;
+    std::vector<unsigned char> bgra;
 
     std::cout << "size: " << width << " x " << height << std::endl;
 
@@ -32,15 +32,14 @@ TEST(encoder, h264) {
 
     printf("\nTesting captureRgba with H264 encode %lu x %lu...\n", width, height);
     auto start = std::chrono::high_resolution_clock::now();
-    int frames = 50;
+    int frames = 70;
     for (int i = 0; i < frames; i++) {
         size_t w, h;
-        cap.captureRgba(rgba, w, h);
-        auto [fs, kf] = encoder.encode(rgba);
+        cap.captureBgra(bgra, w, h);
+        auto [fs, kf] = encoder.encodeBGRA(bgra);
         fprintf(stdout, "\r  frame: %d, %d bytes, %lux%lu, key: %d     ", i, fs, w, h, kf);
         fflush(stdout);
     }
-    encoder.encode(rgba, false, true);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -53,7 +52,8 @@ TEST(encoder, h264) {
     printf("\nTesting captureRgba without H264 encode %lu x %lu...\n", width, height);
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < frames; i++) {
-        cap.captureRgba(rgba);
+        size_t w, h;
+        cap.captureBgra(bgra, w, h);
         std::cout << "\r  frame: " << i << std::flush;
     }
 

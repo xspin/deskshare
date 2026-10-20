@@ -22,8 +22,8 @@ class Stream : public Singleton<Stream> {
     ~Stream();
 
   public:
-    using DetailTuple = std::tuple<size_t, time_t, WsResponse *>; // id, time, Response
-                                                                  //
+    using DetailTuple = std::tuple<size_t, time_t, WsResponse *, std::string>; // id, time, Response
+                                                                               //
     void setup(int max_fps, float quality, EncodeType type);
     void init(uv_loop_t *loop);
     void start();

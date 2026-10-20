@@ -24,6 +24,7 @@ class Capturer : public Singleton<Capturer> {
     static void rgbaToGray(std::vector<unsigned char> &rgba, size_t width, size_t height);
 
     static void stop();
+    static bool start();
 
   private:
     Capturer();

@@ -65,10 +65,6 @@ class GuiWindow : public Fl_Window {
 GUI::GUI() {
     Fl_Tooltip::delay(0.5);
     Fl_Tooltip::hoverdelay(0);
-    show_preview = false;
-    show_detail = false;
-    show_log = false;
-    focused = true;
 }
 
 GUI::~GUI() {
@@ -123,19 +119,49 @@ void GUI::onTimeout(void *data) {
     Fl::repeat_timeout(TIMEOUT_INTERVAL, onTimeout, data);
 }
 
-void GUI::onMessage(const char *msg) {
-
-    if (show_detail) {
+void GUI::onDetailMessage(bool first) {
+    if (first && show_detail) {
         show_detail = false;
+        LOG_DEBUG_STREAM << "Toggle detail off";
+        this->previewOn();
+        return;
+    }
+    LOG_DEBUG_STREAM << "Toggle detail on";
+    show_preview = false;
+    show_log = false;
+    show_detail = true;
+    show_about = false;
+
+    this->detail->value(getDetail().c_str());
+    this->preview->hide();
+    this->display->hide();
+    this->detail->show();
+
+    Fl::add_timeout(
+        3,
+        [](void *data) {
+            auto self = static_cast<GUI *>(data);
+            if (self->show_detail) {
+                self->onDetailMessage(false);
+            }
+        },
+        this);
+}
+
+void GUI::onAboutMessage(const char *msg) {
+
+    if (show_about) {
+        show_about = false;
         this->previewOn();
         return;
     }
 
-    LOG_DEBUG_STREAM << "show detail/about";
+    LOG_DEBUG_STREAM << "show about";
     show_preview = false;
     show_log = false;
-    show_detail = true;
-    this->detail->label(msg);
+    show_detail = false;
+    show_about = true;
+    this->detail->value(msg);
     this->preview->hide();
     this->display->hide();
     this->detail->show();
@@ -144,7 +170,7 @@ void GUI::onMessage(const char *msg) {
         10,
         [](void *data) {
             auto self = static_cast<GUI *>(data);
-            if (!self->show_detail)
+            if (!self->show_about)
                 return;
             self->previewOn();
         },
@@ -159,17 +185,16 @@ void GUI::onAbout(Fl_Widget *w, void *data) {
         ss << "\n\nDeskShare v" << APP_VERSION << "\n\n"
            << "Compiler: " << compilerInfo() << "\n\n"
            << "Build: " << BUILD_TIME << "\n\n"
-           << "Email: xnipse@@gmail.com\n\n";
+           << "Email: xnipse@gmail.com\n\n";
         about_info = ss.str();
     }
     GUI *self = static_cast<GUI *>(data);
     self->detail->align(FL_ALIGN_CENTER | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    self->onMessage(about_info.c_str());
+    self->onAboutMessage(about_info.c_str());
 }
 
-void GUI::onDetail(Fl_Widget *w, void *data) {
-    static std::string details;
-    GUI *self = static_cast<GUI *>(data);
+std::string GUI::getDetail() {
+    GUI *self = this;
     Stream &s = Stream::instance();
     auto reqs = s.getReqs();
 
@@ -186,13 +211,18 @@ void GUI::onDetail(Fl_Widget *w, void *data) {
     auto now = std::time(nullptr);
     for (const auto &[key, info] : reqs) {
         auto ts = std::get<1>(info);
+        const std::string &ua = std::get<3>(info);
         time_t d = now - ts;
-        ss << "[" << utils::timeFmt(ts) << "]    " << key << "    ("
-           << utils::gmTimeFmt(d, "%H:%M:%S") << ")\n";
+        ss << "[" << utils::timeFmt(ts) << "] (" << utils::gmTimeFmt(d, "%H:%M:%S") << ") " << key
+           << " " << ua << "\n";
     }
-    details = ss.str();
+    return ss.str();
+}
+
+void GUI::onDetail(Fl_Widget *w, void *data) {
+    GUI *self = static_cast<GUI *>(data);
     self->detail->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    self->onMessage(details.c_str());
+    self->onDetailMessage(true);
 }
 
 void GUI::previewImpl(void *data) {
@@ -241,6 +271,7 @@ void GUI::previewImpl(void *data) {
 void GUI::previewOn() {
     GUI *self = this;
     show_detail = false;
+    show_about = false;
     show_log = false;
     if (show_preview) {
         return;
@@ -285,25 +316,27 @@ void GUI::onLog(Fl_Widget *w, void *data) {
     GUI *self = static_cast<GUI *>(data);
     if (self->show_log) {
         self->show_log = false;
+        LOG_DEBUG_STREAM << "Toggle log off";
         self->previewOn();
         return;
     }
-    LOG_DEBUG_STREAM << "show log";
+    LOG_DEBUG_STREAM << "Toggle log on";
     self->show_preview = false;
     self->show_detail = false;
+    self->show_about = false;
     self->show_log = true;
     self->detail->hide();
     self->preview->hide();
     self->display->show();
-    Fl::add_timeout(
-        10,
-        [](void *data) {
-            GUI *self = static_cast<GUI *>(data);
-            if (!self->show_log)
-                return;
-            self->previewOn();
-        },
-        self);
+    // Fl::add_timeout(
+    //     10,
+    //     [](void *data) {
+    //         GUI *self = static_cast<GUI *>(data);
+    //         if (!self->show_log)
+    //             return;
+    //         self->previewOn();
+    //     },
+    //     self);
 }
 
 void GUI::showLog() {
@@ -497,8 +530,10 @@ void GUI::init(std::function<void()> callback) {
     preview->color(DEFAULT_BG_COLOR);
     preview->hide();
 
-    detail = std::make_unique<Fl_Box>(preview_x, preview_y, preview_w, preview_h);
+    detail = std::make_unique<Fl_Multiline_Output>(preview_x, preview_y, preview_w, preview_h);
     detail->box(FL_FRAME_BOX);
+    detail->color(FL_GRAY);
+    detail->textcolor(FL_BLACK);
     detail->hide();
 
     previewOn();
@@ -523,6 +558,7 @@ void GUI::deactivate() {
     button_start->activate();
     button_start->labelcolor(FL_RED);
     running = true;
+    previewOn();
 }
 
 void GUI::setInfo(const std::string &msg) {

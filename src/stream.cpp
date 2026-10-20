@@ -2,6 +2,7 @@
 #include "capturer.h"
 #include "logger.h"
 #include "server.h"
+#include "ua.hpp"
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -21,7 +22,6 @@ Stream::~Stream() {
 }
 
 void Stream::close() {
-    Capturer::stop();
 
     stop();
     LOG_INFO_STREAM << "close stream";
@@ -68,12 +68,16 @@ void Stream::start() {
     _running = true;
     _stat_ts_ms = uv_now(_loop); // milliseconds
     _frame_idx = 0;
+    if (!Capturer::start()) {
+        LOG_ERROR_STREAM << "Start Capturer failed\n";
+    }
 }
 
 void Stream::stop() {
     LOG_INFO_STREAM << "stop stream";
     _running = false;
     _reqs.clear();
+    Capturer::stop();
 }
 
 // run on main thread
@@ -170,7 +174,6 @@ void Stream::sendFrame() {
     _bytes += sz * sended;
     LOG_DEBUG_STREAM << "send frame-" << _frame_idx << " send reqs " << sended;
     _frame_idx++;
-    // TODO fps
 }
 
 std::pair<float, float> Stream::stat() {
@@ -194,19 +197,19 @@ bool Stream::isH264() {
 
 void Stream::requestStart(const std::string &ip, uint16_t port, size_t id, WsResponse *resp) {
     std::string key = ip + ":" + std::to_string(port);
-    _reqs[key] = {id, std::time(nullptr), resp};
     std::string ua;
     if (resp) {
         const http_request *req = resp->getRequest();
         auto it = req->headers.find("User-Agent");
         ua = it != req->headers.end() ? it->second : "";
     }
+    _reqs[key] = {id, std::time(nullptr), resp, getUaInfo(ua)};
     LOG_INFO_STREAM << key << " id-" << id << " Enter."
                     << " Remote Clients: " << _reqs.size() << "\n"
                     << ua;
     _frame_h264.setKeyFrame();
     if (_reqs.size() == 1) {
-        start();
+        _running = true;
         uv_async_send(&_worker_async);
     }
 }
@@ -216,7 +219,7 @@ void Stream::requestEnd(const std::string &ip, uint16_t port, size_t id) {
     _reqs.erase(key);
     LOG_INFO_STREAM << key << " id-" << id << " Leave. Remote Clients: " << _reqs.size();
     if (_reqs.empty()) {
-        stop();
+        _running = false;
     }
 }
 

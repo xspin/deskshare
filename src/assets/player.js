@@ -42,10 +42,14 @@ class WsPlayer {
             node: this.video,
             mode: 'video',
             flushingTime: 0,
-            // fps: 20,
+            // fps: 15,
             // debug: true,
             onError: function(err) {
                 console.error('JMuxer error:', err);
+            },
+            onData: (_) => {
+                // const delay = (new Date().getTime()) - this.delayTimestamp;
+                // console.log(delay, 'ms');
             }
         });
 
@@ -98,7 +102,8 @@ class WsPlayer {
         // const duration = this.lastFrameTime === null ? 100 : now - this.lastFrameTime;
         // this.lastFrameTime = now;
         // console.log(this.ws.binaryType, data.byteLength, data.size, data.length);
-        this.jmuxer.feed({ video: frame, isLastVideoFrameComplete: true });
+        const duration = 1000 / this.getFPS();
+        this.jmuxer.feed({ video: frame, isLastVideoFrameComplete: true, duration: duration });
 
         // draw cursor
         this.drawFrame(null, this.frame_width, this.frame_height);
@@ -401,30 +406,6 @@ class WsPlayer {
     }
 
     drawPause() {
-        return;
-        const width = this.canvas.width / this.pixelRatio;
-        const height = this.canvas.height / this.pixelRatio;
-
-        const triWidth = 34; // 三角形宽度
-        const triHeight = 42; // 三角形高度
-        // 计算位置（居中显示）
-        const x = width / 2 - triWidth / 4; // 向左微调一点更居中
-        const y = height / 2 - triHeight / 2;
-
-        this.ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
-        this.ctx.fillRect(0, 0, width, height);
-
-        this.drawTriangle(x, y, triWidth, triHeight);
-        this.ctx.fillStyle = `hsl(${Date.now() / 10 % 360}, 70%, 50%)`;
-        this.ctx.fill();
-    }
-
-    drawTriangle(x, y, width, height) {
-        this.ctx.beginPath();
-        this.ctx.moveTo(x, y); // 左上角
-        this.ctx.lineTo(x + width, y + height / 2); // 右下角（顶点）
-        this.ctx.lineTo(x, y + height); // 左下角
-        this.ctx.closePath();
     }
 
     getDecoderName() {

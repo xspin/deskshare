@@ -11,7 +11,7 @@ class ScreenCapture : public Singleton<ScreenCapture> {
     friend Singleton<ScreenCapture>;
 
   public:
-    bool init();
+    bool start();
     void stop();
 
     static void _setScale(float scale);
@@ -41,23 +41,26 @@ class ScreenCapture : public Singleton<ScreenCapture> {
 
   private:
     ScreenCaptureImpl impl_;
-    bool started_ = false;
     inline static float scale_ = 0;
 
-    inline static std::vector<uint8_t> *buf_;
+    inline static std::vector<uint8_t> buf_;
+    // inline static const uint8_t *buf_ = nullptr;
     inline static size_t width_ = 0;
     inline static size_t height_ = 0;
-    inline static std::atomic<bool> running_ = true;
+    // inline static size_t rowsize_ = 0;
+    inline static std::atomic<bool> running_ = false;
 
-    inline static bool put_ready_ = false;
-    inline static std::mutex put_mtx_;
-    inline static std::condition_variable put_cv_;
+    // inline static bool put_ready_ = false;
+    // inline static std::mutex put_mtx_;
+    // inline static std::condition_variable put_cv_;
+    //
+    // inline static bool get_ready_ = false;
+    // inline static std::mutex get_mtx_;
+    // inline static std::condition_variable get_cv_;
 
-    inline static bool get_ready_ = false;
-    inline static std::mutex get_mtx_;
-    inline static std::condition_variable get_cv_;
-
-    inline static bool stopped_ = false;
+    inline static int ready_ = 0;
+    inline static std::mutex mtx_;
+    inline static std::condition_variable cv_;
 
     // inline static I420Callback onI420Frame_ = nullptr;
     // inline static NV12Callback onNV12Frame_ = nullptr;

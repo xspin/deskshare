@@ -40,24 +40,27 @@ class GUI {
     static void onTimeout(void *data);
     static void onAbout(Fl_Widget *w, void *data);
     static void onDetail(Fl_Widget *w, void *data);
-    // static void onPreview(Fl_Widget *w, void *data);
+
     static void previewImpl(void *data);
     static void onLog(Fl_Widget *w, void *data);
 
-    void onMessage(const char *msg);
+    std::string getDetail();
+    void onAboutMessage(const char *msg);
+    void onDetailMessage(bool);
     void previewOn();
     void previewOff();
     void focusHandle(int event);
 
   private:
     // gui size
-    int width;
-    int height;
+    int width = 0;
+    int height = 0;
 
-    bool show_preview;
-    bool show_detail;
-    bool show_log;
-    bool focused;
+    bool show_preview = false;
+    bool show_detail = false;
+    bool show_about = false;
+    bool show_log = false;
+    bool focused = true;
 
     bool running = false;
 
@@ -80,7 +83,7 @@ class GUI {
     std::unique_ptr<Fl_Button> button_detail;
     std::unique_ptr<Fl_Button> button_log;
 
-    std::unique_ptr<Fl_Box> detail;
+    std::unique_ptr<Fl_Multiline_Output> detail;
     std::unique_ptr<Fl_Box> preview;
     std::unique_ptr<Fl_Text_Buffer> text_buf; // must declare before display
     std::unique_ptr<Fl_Text_Display> display;

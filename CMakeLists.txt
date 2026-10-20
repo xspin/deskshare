@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "12.3")
 
-project(deskshare VERSION 1.3.1)
+project(deskshare VERSION 1.3.2)
 message("Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
 
 set(VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
@@ -41,7 +41,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (WIN32)
     set(LIBUV_ROOT_DIR "C:/libuv-1.51.0")
     set(LIBUV_LIB_DIR "${LIBUV_ROOT_DIR}/build")
-
     set(OPENSSL_ROOT_DIR "C:/OpenSSL-1.0.0a-bin-x64/x86_64-w64-mingw32")
     set(OPENSSL_LIB_DIR "${OPENSSL_ROOT_DIR}/lib")
 
@@ -118,11 +117,6 @@ if (NOT ( LIBUV AND LIBCRYPTO AND LIBX264 AND LIBYUV ) )
 endif()
 
 
-# add_library(x264 STATIC IMPORTED)
-# set_target_properties(x264 PROPERTIES 
-#     IMPORTED_LOCATION /usr/local/opt/x264/lib/libx264.a 
-# )
-#
 
 set(H264_LIBS
     ${LIBX264}

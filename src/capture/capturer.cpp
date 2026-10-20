@@ -27,6 +27,11 @@ Capturer::Capturer() {
 Capturer::~Capturer() {
 }
 
+bool Capturer::start() {
+    auto &sc = ScreenCapture::instance();
+    return sc.start();
+}
+
 void Capturer::stop() {
     auto &sc = ScreenCapture::instance();
     sc.stop();
@@ -53,9 +58,11 @@ bool Capturer::captureBgra(std::vector<unsigned char> &bgra, size_t &width, size
         width += width & 1;
         height += height & 1;
 
+        bgra.resize(width * height * 4);
         if (libyuv::ARGBScale(src.data(), src_w * 4, src_w, src_h, bgra.data(), width * 4, width,
-                              height, libyuv::kFilterNone)) {
-            std::cerr << "ARGBScale failed";
+                              height, libyuv::kFilterBilinear)) {
+            std::cerr << "ARGBScale failed " << src.size() << " " << src_w << "x" << src_h << " to "
+                      << bgra.size() << " " << width << "x" << height << "\n";
             return false;
         }
         return true;

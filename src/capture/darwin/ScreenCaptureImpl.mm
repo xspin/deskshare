@@ -158,7 +158,7 @@ ScreenCaptureImpl::~ScreenCaptureImpl() {
 bool ScreenCaptureImpl::start() {
     if (impl_->helper) {
         NSLog(@"%@ already started", impl_->helper);
-        return false;
+        return true;
     }
     impl_->helper = [[ScreenCaptureHelper alloc] init];
 

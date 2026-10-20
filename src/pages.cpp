@@ -180,6 +180,7 @@ static void initStreamRoutes(HttpServer &server) {
 void exit() {
     s_stream.close();
 }
+
 void stop() {
     s_timeoutQueue.stop();
     s_stream.stop();

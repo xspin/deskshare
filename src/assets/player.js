@@ -540,13 +540,11 @@ function initFullScreen() {
     const info_delay = document.getElementById('delay');
     const info_speed = document.getElementById('speed');
     const info_state = document.getElementById('state');
-    const info_clients = document.getElementById('clients');
     const info_decoder = document.getElementById('decoder');
     const details_listener = () => {
         update_details();
         details.classList.remove('hidden');
     };
-    info_clients.addEventListener('mouseenter', details_listener);
     info_state.addEventListener('mouseenter', details_listener);
 
     let clients = 0;
@@ -563,13 +561,12 @@ function initFullScreen() {
         info_speed.textContent = `${speed}`;
 
         const state = player.isPlaying ? '▶︎' : '🆇';
-        info_state.textContent = `${state}`;
 
         if (clients != player.connections) {
             update_details();
         }
         clients = player.isPlaying ? player.connections : '?';
-        info_clients.textContent = `${clients}`;
+        info_state.textContent = `${state} ${clients}`;
 
         const decoder = player.getDecoderName();
         info_decoder.textContent = decoder;

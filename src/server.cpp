@@ -345,50 +345,53 @@ std::string Response::str() const {
     return response_stream.str();
 }
 
-WsResponse::WsResponse(RespFunc resp) : Response(resp), ws_type(WsFrameType::NIL) {
+WsResponse::WsResponse(RespFunc resp) : Response(resp), ws_type_(WsFrameType::NIL) {
 }
 
 WsResponse::~WsResponse() {
 }
 
 void WsResponse::setWsFrame(WsFrameType type, const std::string &frame) {
-    ws_type = type;
-    ws_frame = frame;
+    ws_type_ = type;
+    ws_frame_ = frame;
 }
 
 void WsResponse::unsetWsFrame() {
-    ws_type = WsFrameType::NIL;
-    ws_frame.clear();
+    ws_type_ = WsFrameType::NIL;
+    ws_frame_.clear();
 }
 
 WsFrameType WsResponse::getWsFrameType() {
-    return ws_type;
+    return ws_type_;
 }
 
 std::string WsResponse::getWsFrame() {
-    return ws_frame;
+    return ws_frame_;
 }
 
 void WsResponse::setHandle(uv_stream_t *handle) {
-    _wreq.handle = handle;
-    _wreq.data = this;
+    handle_ = handle;
 }
 
-void WsResponse::onSend(SendCallback cb) {
-    _send_cb = std::move(cb);
-}
-
-void WsResponse::send(const char *data, size_t size) {
-    assert(_wreq.handle);
-    _buf = uv_buf_init((char *)data, size);
-    uv_write(&_wreq, _wreq.handle, &_buf, 1, on_write);
-}
-
-void WsResponse::on_write(uv_write_t *req, int status) {
-    auto *self = static_cast<WsResponse *>(req->data);
-    if (self->_send_cb) {
-        self->_send_cb(status);
+void WsResponse::send(const char *data, size_t size, SendCallback on_send) {
+    uv_write_t *wreq = new uv_write_t{0};
+    wreq->handle = handle_;
+    // wreq->data = new std::pair<WsResponse *, SendCallback>(this, std::move(on_send));
+    if (on_send) {
+        wreq->data = new SendCallback(on_send);
+    } else {
+        wreq->data = nullptr;
     }
+
+    uv_buf_t buf = uv_buf_init((char *)data, size);
+    uv_write(wreq, wreq->handle, &buf, 1, [](uv_write_t *req, int status) {
+        SendCallback *cb = static_cast<SendCallback *>(req->data);
+        if (cb) {
+            (*cb)(status);
+            delete cb;
+        }
+        delete req;
+    });
 }
 
 HttpServer::HttpServer(uv_loop_t *loop) : loop(loop) {

@@ -86,7 +86,7 @@ void ScreenCapture::_onBGRAFrame(const uint8_t *data, size_t bytesPerRow, size_t
             std::memcpy(buf_.data() + row * width * 4, data + row * bytesPerRow, width * 4);
         }
     }
-    cv_.notify_one();
+    cv_.notify_all();
 }
 
 bool ScreenCapture::captureBGRA(std::vector<uint8_t> &bgra, size_t &width, size_t &height) {
@@ -107,6 +107,6 @@ bool ScreenCapture::captureBGRA(std::vector<uint8_t> &bgra, size_t &width, size_
         height = height_;
         bgra = buf_;
     }
-    cv_.notify_one();
+    cv_.notify_all();
     return true;
 }

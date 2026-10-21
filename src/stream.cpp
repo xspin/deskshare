@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "server.h"
 #include "ua.hpp"
+#include "utils.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -23,6 +24,7 @@ Stream::~Stream() {
 
 void Stream::close() {
 
+    Capturer::stop();
     stop();
     LOG_INFO_STREAM << "close stream";
     _terminal = true;
@@ -60,6 +62,9 @@ void Stream::init(uv_loop_t *loop) {
     uv_async_init(_loop, &_async, async_cb);
     _async.data = this;
     _thread = std::thread(worker, this);
+    if (!Capturer::start()) {
+        LOG_ERROR_STREAM << "Start Capturer failed\n";
+    }
 }
 
 void Stream::start() {
@@ -77,7 +82,6 @@ void Stream::stop() {
     LOG_INFO_STREAM << "stop stream";
     _running = false;
     _reqs.clear();
-    Capturer::stop();
 }
 
 // run on main thread
@@ -106,7 +110,7 @@ void Stream::worker_cb(uv_async_t *handle) {
 
     int d = 1000 / self->_max_fps - (uv_now(handle->loop) - self->_frame_ts_ms);
     if (d > 0) {
-        LOG_DEBUG("wating for %d ms", d);
+        // LOG_DEBUG("wating for %d ms", d);
         uv_timer_start(&self->_worker_timer, worker_timer_cb, d, 0);
     } else {
         worker_timer_cb(&self->_worker_timer);
@@ -152,27 +156,27 @@ void Stream::sendFrame() {
        << "\"connections\":" << _reqs.size() << ","
        << "\"clients\":" << listClients() << "}";
 
-    auto os = std::make_shared<std::stringstream>();
-    *os << WsClient::pack_text_frame(ss.str());
+    std::stringstream os;
+    os << WsClient::pack_text_frame(ss.str());
     auto [data, size] = _frame->getFrame();
-    *os << WsClient::pack_binary_frame(data, size);
+    os << WsClient::pack_binary_frame(data, size);
 
     uv_async_send(&_worker_async);
 
-    const auto &buf = os->str();
-    size_t sz = buf.size();
+    auto buf = std::make_shared<std::string>(os.str());
+    size_t sz = buf->size();
     int sended = 0;
     for (const auto &[key, info] : _reqs) {
         WsResponse *resp = std::get<2>(info);
         if (resp) {
-            resp->onSend([os](int ret) {}); // ref os
-            resp->send(buf.data(), sz);
+            resp->send(buf->data(), sz, [buf](int ret) { // ref buf
+            });
             ++sended;
         }
     }
     _frames++;
     _bytes += sz * sended;
-    LOG_DEBUG_STREAM << "send frame-" << _frame_idx << " send reqs " << sended;
+    // LOG_DEBUG_STREAM << "send frame-" << _frame_idx << " reqs " << sended;
     _frame_idx++;
 }
 
@@ -191,6 +195,7 @@ std::pair<float, float> Stream::stat() {
     _bytes = 0;
     return {fps, speed};
 }
+
 bool Stream::isH264() {
     return _type == EncodeType::H264;
 }

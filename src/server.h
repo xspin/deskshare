@@ -152,17 +152,12 @@ class WsResponse : public Response {
     std::string getWsFrame();
 
     void setHandle(uv_stream_t *handle);
-    void onSend(SendCallback cb);
-    void send(const char *data, size_t size);
+    void send(const char *data, size_t size, SendCallback cb);
 
   private:
-    static void on_write(uv_write_t *req, int status);
-
-    WsFrameType ws_type;
-    std::string ws_frame;
-    uv_write_t _wreq{0};
-    uv_buf_t _buf{0};
-    SendCallback _send_cb;
+    WsFrameType ws_type_;
+    std::string ws_frame_;
+    uv_stream_t *handle_ = nullptr;
 };
 
 // HTTP 服务器类

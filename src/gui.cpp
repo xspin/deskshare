@@ -143,6 +143,8 @@ void GUI::onDetailMessage(bool first) {
             auto self = static_cast<GUI *>(data);
             if (self->show_detail) {
                 self->onDetailMessage(false);
+            } else {
+                LOG_DEBUG_STREAM << "Toggle detail off";
             }
         },
         this);
@@ -152,11 +154,12 @@ void GUI::onAboutMessage(const char *msg) {
 
     if (show_about) {
         show_about = false;
+        LOG_DEBUG_STREAM << "Toggle about off";
         this->previewOn();
         return;
     }
 
-    LOG_DEBUG_STREAM << "show about";
+    LOG_DEBUG_STREAM << "Toggle about on";
     show_preview = false;
     show_log = false;
     show_detail = false;
@@ -172,6 +175,7 @@ void GUI::onAboutMessage(const char *msg) {
             auto self = static_cast<GUI *>(data);
             if (!self->show_about)
                 return;
+            LOG_DEBUG_STREAM << "Toggle about off";
             self->previewOn();
         },
         this);
@@ -182,10 +186,10 @@ void GUI::onAbout(Fl_Widget *w, void *data) {
     static std::string about_info;
     if (about_info.empty()) {
         std::stringstream ss;
-        ss << "\n\nDeskShare v" << APP_VERSION << "\n\n"
-           << "Compiler: " << compilerInfo() << "\n\n"
-           << "Build: " << BUILD_TIME << "\n\n"
-           << "Email: xnipse@gmail.com\n\n";
+        ss << "\n DeskShare v" << APP_VERSION << "\n\n"
+           << " Compiler: " << compilerInfo() << "\n\n"
+           << " Build: " << BUILD_TIME << "\n\n"
+           << " Email: xnipse@gmail.com\n\n";
         about_info = ss.str();
     }
     GUI *self = static_cast<GUI *>(data);
@@ -199,15 +203,15 @@ std::string GUI::getDetail() {
     auto reqs = s.getReqs();
 
     std::stringstream ss;
-    ss << "Screen Size: " << self->screen_width << " x " << self->screen_height << "\n";
-    ss << "Port: " << g_config.port << "\n";
-    ss << "Timeout: " << g_config.timeout << " seconds\n";
-    ss << "Max FPS: " << g_config.fps << "\n";
-    ss << "Quality: " << int(g_config.quality * 100) << "%\n";
-    ss << "Codec: " << (g_config.h264 ? "H.264" : "MJPEG") << "\n";
-    ss << "Status: " << (self->running ? "running" : "stopped") << "\n";
+    ss << " Screen Size: " << self->screen_width << " x " << self->screen_height << "\n";
+    ss << " Port: " << g_config.port << "\n";
+    ss << " Timeout: " << g_config.timeout << " seconds\n";
+    ss << " Max FPS: " << g_config.fps << "\n";
+    ss << " Quality: " << int(g_config.quality * 100) << "%\n";
+    ss << " Codec: " << (g_config.h264 ? "H.264" : "MJPEG") << "\n";
+    ss << " Status: " << (self->running ? "running" : "stopped") << "\n";
 
-    ss << "\nRemote Clients (" << reqs.size() << "):\n\n";
+    ss << "\n Remote Clients (" << reqs.size() << "):\n\n";
     auto now = std::time(nullptr);
     for (const auto &[key, info] : reqs) {
         auto ts = std::get<1>(info);
@@ -216,6 +220,7 @@ std::string GUI::getDetail() {
         ss << "[" << utils::timeFmt(ts) << "] (" << utils::gmTimeFmt(d, "%H:%M:%S") << ") " << key
            << " " << ua << "\n";
     }
+    LOG_DEBUG_STREAM << "Update detail messages: \n" << ss.str();
     return ss.str();
 }
 
@@ -239,7 +244,10 @@ void GUI::previewImpl(void *data) {
     Fl_Timestamp frame_start = Fl::now();
     auto &cap = Capturer::instance();
     auto [width, height] = self->img_size;
-    cap.captureRgbaScaled(self->pixel, width, height);
+    if (!cap.captureRgbaScaled(self->pixel, width, height)) {
+        LOG_WARNING_STREAM << "Failed to captureRgbaScaled " << width << "x" << height;
+        self->pixel.resize(width*height*4, 0);
+    }
 
     if (!self->show_preview) {
         cap.rgbaToGray(self->pixel, width, height);
@@ -282,6 +290,7 @@ void GUI::previewOn() {
         self->preview->show();
         return;
     }
+    LOG_DEBUG_STREAM << "Toggle preview on";
     show_preview = true;
 
     auto [img_w, img_h] = Capturer::instance().getResolution();

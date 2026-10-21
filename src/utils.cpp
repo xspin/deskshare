@@ -1,7 +1,9 @@
 #include "utils.h"
 #include <algorithm>
 #include <iomanip>
+#include <map>
 #include <sstream>
+#include <stack>
 #include <string>
 #include <unistd.h>
 
@@ -282,5 +284,39 @@ std::string trim(const std::string &str) {
 
     return std::string(front, back);
 }
+
+#ifdef STACK_CHECK
+void check_stack_usage(const char *tag) {
+    static std::map<uint64_t, std::tuple<size_t, char *, size_t>> mp;
+    uint64_t tid;
+    pthread_threadid_np(nullptr, &tid);
+    // static size_t stack_size = pthread_get_stacksize_np(pthread_self());
+    // static char *stack_start = (char *)pthread_get_stackaddr_np(pthread_self());
+    size_t stack_size;
+    char *stack_start;
+    size_t last_size = 0;
+    auto it = mp.find(tid);
+    char dummy;
+    if (it == mp.end()) {
+        stack_size = pthread_get_stacksize_np(pthread_self());
+        stack_start = (char *)pthread_get_stackaddr_np(pthread_self());
+        mp[tid] = std::make_tuple(stack_size, stack_start, stack_start - &dummy);
+    } else {
+        stack_size = std::get<0>(it->second);
+        stack_start = std::get<1>(it->second);
+        last_size = std::get<2>(it->second);
+    }
+    size_t used;
+    used = stack_start - &dummy;
+    const char *color = "33";
+    if (used > last_size) {
+        color = "31"; // red
+        if (last_size > 0)
+            std::get<2>(it->second) = used;
+    }
+    fprintf(stderr, "\033[%sm(0x%llx) [%s] stack used: %zu bytes (%.2f%% of %zuKB)\033[0m\n", color,
+            tid, tag, used, used * 100.0 / stack_size, stack_size / 1024);
+}
+#endif
 
 } // namespace utils
